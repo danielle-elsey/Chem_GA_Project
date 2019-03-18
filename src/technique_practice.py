@@ -13,7 +13,14 @@ test_dict = dict(zip(range(1, 27), string.ascii_uppercase))
 print(test_dict)
 '''
 
+parent_a = [0,1,2,3,4,0,0,0,0]
+parent_b = [0,0,0,0,0,5,6,7,8]
 
+temp_child = []
+temp_child.append(parent_a[1:4])
+
+print(temp_child)
+'''
 #given the number of types of monomers in each polymer, find all possible sequences [combinations]
 def find_sequences(num_type_mono):
     #find length of each sequence
@@ -37,3 +44,4 @@ def find_sequences(num_type_mono):
     return alpha_seqs
 
 print(find_sequences(3))
+'''
