@@ -7,11 +7,12 @@ Notes:
 import string
 import random
 import pybel as pb
+import numpy as np
 from statistics import mean
 from itertools import product
 from copy import deepcopy
 
-#given the number of types of monomers in each polymer, find all possible sequences [combinations]
+#given the number of types of monomers in each polymer, find all possible [numerical] sequences
 def find_sequences(num_type_mono):
     #find length of each sequence
     seq_len = num_type_mono**2
@@ -22,16 +23,16 @@ def find_sequences(num_type_mono):
 
     return numer_seqs
 
-#given a population, polymer size, and list of monomer mw's, calculate polymer mw's
+#given a population, number of monomers per polymer, and list of monomer mw's, calculate polymer mw's
 def find_poly_mw(population, poly_size, mw_list):
     poly_mw_list = []
     for polymer in population:
         temp_mw = 0
-        #counter for cycling over sequence
+        #counter for cycling over monomer sequence
         cycle = 0
         #loop over total monomers in each polymer
         for i in range(poly_size):
-            #cycle over sequence until total number of monomers is reached
+            #cycle over monomer sequence until total number of monomers is reached
             seq_cycle_location = i-cycle*(len(polymer[0]))
             seq_monomer_index = polymer[0][seq_cycle_location]
             if seq_cycle_location == (len(polymer[0])-1):
@@ -42,11 +43,24 @@ def find_poly_mw(population, poly_size, mw_list):
         poly_mw_list.append(temp_mw)
     return poly_mw_list
 
-#given list of sequences, list of molecular weights,
-#and a population with polymers in index format: [sequence index, monomer1 index, ..., monomerX index]
+def find_poly_dipole(population, poly_size, mw_list):
+    poly_dipole_list = []
+    for polymer in population:
+        poly_smiles = construct_polymer_string
+        ob = pb.ob
+        mol = pb.readstring("smi", poly_smiles)
+        cm = ob.OBChargeModel_FindType('mmff94')
+        cm.ComputeCharges(mol.OBMol)
+        diptensor = cm.GetDipoleMoment(mol.OBMol)
+        dipole = math.sqrt(diptensor.GetX()**2+diptensor.GetY()**2+diptensor.GetZ()**2)
+
+        poly_mw_list.append(dipole)
+    return poly_mw_list
+
+#given a population with polymers in index format: [sequence index, monomer1 index, ..., monomerX index],
+#list of sequences, and list of molecular weights,
 #return population with polymers in human readable format: [[alpha sequence], 'monomer SMILES string 1', ..., 'monomer SMILES string X']
 def make_pop_readable(population, sequence_list, smiles_list):
-
     #create dictionary mapping numbers [start index 0] to uppercase English alphabet letters
     alpha_dict = dict(zip(range(26), string.ascii_uppercase))
 
@@ -71,18 +85,30 @@ def make_pop_readable(population, sequence_list, smiles_list):
 
     return readable_poly
 
-#given list of polymer molecular weights and polymer population list, return list of heaviest 50% of polymers
-def parent_select(polymer_mw_list, population):
-    parent_count = int(len(polymer_mw_list)/2)
+#fitness function which assigns ranks to current population members based on
+#their associated property values, where rank 0 = best
+def fitness_fn(opt_property, population, poly_property_list):
+    #rank based on highest property value = best
+    if opt_property == ("mw" || "dip"):
+        #gives indicies in ascending order
+        ranked_indicies = np.argsort(poly_property_list)
+        #reverse list so highest property value = 0th
+        ranked_indicies[::-1]
+    else:
+        print("Error: opt_property not recognized. trace:fitness_fn")
+    return ranked_indicies
+
+
+#return list of best 50% of polymers (as defined by fitness_fn)
+def parent_select(opt_property, population, poly_property_list):
+    parent_count = int(len(population)/2)
     parent_list = []
-    temp_mw_list = deepcopy(polymer_mw_list)
+
+    fitness_list = fitness_fn(opt_property, population, poly_property_list)
 
     for x in range (parent_count):
-        temp_max_mw = max(temp_mw_list)
-        #add heaviest polymer to parent_list
-        parent_list.append(population[polymer_mw_list.index(temp_max_mw)])
-        #replace heaviest mw with 0 in mw list (to preserve indexes)
-        temp_mw_list[temp_mw_list.index(temp_max_mw)] = 0
+        parent_list.append(population[fitness_list[x]])
+
     return parent_list
 
 #given a polymer and sequence and smiles lists, creates random point mutation within polymer
@@ -111,18 +137,17 @@ def crossover(parent_list, pop_size, poly_size):
         parent_b = random.randint(0, len(parent_list)-1)
 
         #ensure parents are unique indiviudals
-        while parent_b == parent_a:
-            parent_b = random.randint(0, len(parent_list)-1)
+        if len(parent_list) > 1:
+            while parent_b == parent_a:
+                parent_b = random.randint(0, len(parent_list)-1)
 
-        #number of monomers taken from parent A
+        #determine number of monomers taken from parent A
         num_mono_a = int(poly_size/2)
-        #number of monomers taken from parent B
-        #num_mono_b = poly_size-num_mono_a
 
         #randomly determine which parent's sequence will be used
         par_seq = random.randint(0,1)
 
-        #create hybrid childe
+        #create hybrid child
         temp_child = []
         #give child appropriate parent's sequence
         if par_seq == 0:
@@ -136,39 +161,53 @@ def crossover(parent_list, pop_size, poly_size):
         for monomer in range(num_mono_a+2, poly_size-1):
             temp_child.append(parent_list[parent_b][monomer])
 
-
-        '''
-        #create child with sequence from A, monomer types from B
-        temp_child = []
-        temp_child.append(parent_list[parent_a][0])
-        for monomer in parent_list[parent_b][1:]:
-            temp_child.append(monomer)
-
-        '''
-
         new_pop.append(temp_child)
 
     return new_pop
 
+#given a polymer and sequence and smiles lists, creates random point mutation within polymer
+def mutate(polymer, sequence_list, smiles_list):
+    #choose point of mutation (sequence or specific monomer)
+    point = random.randint(0,len(polymer)-1)
+    #replace sequence
+    if point == 0:
+        polymer[point] = sequence_list[random.randint(0,len(sequence_list)-1)]
+    #or replace specific monomer
+    else:
+        polymer[point] = random.randint(0, len(smiles_list)-1)
+    return polymer
 
-'''
-#given a polymer as a list of monomer indicies from population, list of all monomers, and number of monomers per polymer, construct SMILES string of polymer
+
+
+#given a polymer, list of all monomers, and number of monomers per polymer, construct SMILES string of polymer
 def construct_polymer_string(polymer, smiles_list, poly_size):
     poly_string = ''
-    for monomer in range(poly_size):
-        poly_string = poly_string + smiles_list[polymer[monomer]]
+
+    cycle = 0
+    #loop over total monomers in each polymer
+    for i in range(poly_size):
+        #cycle over monomer sequence until total number of monomers is reached
+        seq_cycle_location = i-cycle*(len(polymer[0]))
+        seq_monomer_index = polymer[0][seq_cycle_location]
+        if seq_cycle_location == (len(polymer[0])-1):
+            cycle += 1
+        #find index in polymer of monomer index (from smiles_list) from given sequence value
+        monomer_index = polymer[seq_monomer_index+1]
+        poly_string = poly_string + smiles_list[monomer_index]
+
     return poly_string
-'''
+
 
 def main():
     #number of polymers in population
-    pop_size = 5
+    pop_size = 10
     #number of monomers per polymer
     poly_size = 5
     #number of types of monomers in each polymer
     num_type_mono = 2
-    #threshold for minimum MW
-    min_mw_std = 3434
+
+    #property of interest (options: molecular weight 'mw', dipole moment 'dip')
+    opt_property = "dip"
 
     #Read in monomers from input file
     read_file = open('../input_files/1235MonomerList.txt','r')
@@ -183,13 +222,6 @@ def main():
 
     read_file.close()
 
-    #calculate MW for each monomer
-    mw_list = []
-    for monomer in smiles_list:
-        temp_mono = pb.readstring("smi", monomer).molwt
-        mw_list.append(temp_mono)
-
-    #print("max", max(mw_list))
     #create all possible numerical sequences for given number of monomer types
     sequence_list = find_sequences(num_type_mono)
 
@@ -210,54 +242,67 @@ def main():
         #add polymer to population
         population.append(temp_poly)
 
-    #Calculate polymer molecular weights
-    poly_mw_list = find_poly_mw(population, poly_size, mw_list)
+    #find initial population properties
+    if opt_property == "mw":
+        #calculate MW for each monomer
+        mw_list = []
+        for monomer in smiles_list:
+            temp_mono = pb.readstring("smi", monomer).molwt
+            mw_list.append(temp_mono)
+
+        #Calculate polymer molecular weights
+        poly_property_list = find_poly_mw(population, poly_size, mw_list)
+    elif opt_property == "dip":
+        #calculate dipole moments for each polymer
+        poly_property_list = find_poly_dipole(population, poly_size, mw_list)
+    else:
+        print("Error: opt_property not recognized. trace:main:initial pop properties")
+
 
     #set initial values for min, max, and avg polymer weights
-    min_mw_test = min(poly_mw_list)
-    max_mw_test = max(poly_mw_list)
-    avg_mw_test = (max_mw_test-min_mw_test)/2.0
+    min_test = min(poly_property_list)
+    max_test = max(poly_property_list)
+    avg_test = (max_test-min_test)/2.0
 
     #create new output read_file
     write_file = open("ga_polymer_output.txt","w+")
-    write_file.write("min_wt avg_wt max_wt\n")
+    write_file.write("min avg max\n")
 
     #Loop
-    #while (min_mw_test < min_mw_std):
-    for x in range(200):
-
+    #while (min_test < min_std):
+    for x in range(1000):
         #Selection - select best 50% as parents
 
         #select heaviest (best) 50% of polymers as parents
-        population = parent_select(poly_mw_list, population)
-        #print("parent pop", population)
-
-
+        population = parent_select(opt_property, population, poly_property_list)
+        #print("pop after parent", population)
 
         #Crossover - create children to repopulate bottom 50% of polymers in population
         population = crossover(population, pop_size, poly_size)
-        #print("crossover pop", population)
+        #print("pop after crossover", population)
 
-
-        #Mutation - one point mutation per parent
-        for polymer in population:
+        #find starting place for children (second half of population)
+        child_start = int(len(population)/2)+1
+        #Mutation - one point mutation per child polymer
+        for polymer in population[child_start:]:
             polymer = mutate(polymer, sequence_list, smiles_list)
-        #print("mutation pop", population)
 
-        poly_mw_list = find_poly_mw(population, poly_size, mw_list)
 
-        #print(poly_mw_list)
+        if opt_property = "mw":
+            poly_property_list = find_poly_mw(population, poly_size, mw_list)
+        #print("pop after mutation", population)
+
+        #print(poly_property_list)
 
         #find minimum polymer weight
-        min_mw_test = min(poly_mw_list)
-        max_mw_test = max(poly_mw_list)
-        avg_mw_test = mean(poly_mw_list)
+        min_test = min(poly_property_list)
+        max_test = max(poly_property_list)
+        avg_test = mean(poly_property_list)
 
-        print(min_mw_test, max_mw_test, avg_mw_test)
+        write_file.write("{} {} {}\n".format(min_test, avg_test, max_test))
+        print(min_test, max_test, avg_test)
 
-        write_file.write("{} {} {}\n".format(min_mw_test, avg_mw_test, max_mw_test))
-
-        #print(min_mw_test)
+        #print(min_test)
 
 
     write_file.close()
