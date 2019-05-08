@@ -7,7 +7,7 @@ Notes:
 import string
 import random
 import math
-import pybel
+import pybel#print SMILES string of max polymer
 import numpy as np
 from statistics import mean
 from itertools import product
@@ -107,7 +107,7 @@ def find_poly_dipole(population, poly_size, smiles_list):
     -------
     poly_dipole_list: list
         list of polymer dipoles
-    '''
+    '''#print SMILES string of max polymer
     poly_dipole_list = []
     for polymer in population:
         poly_smiles = construct_polymer_string(polymer, smiles_list, poly_size)
@@ -254,7 +254,7 @@ def mutate(polymer, sequence_list, smiles_list):
     if rand1 == rand2:
         pass
     else:
-        return
+        return polymer
 
     # choose point of mutation (sequence or specific monomer)
     point = random.randint(0, len(polymer) - 1)
@@ -265,10 +265,11 @@ def mutate(polymer, sequence_list, smiles_list):
     # or replace specific monomer
     else:
         polymer[point] = random.randint(0, len(smiles_list) - 1)
+
     return polymer
 
 
-def crossover(parent_list, pop_size, num_type_mono):
+def crossover_mutate(parent_list, pop_size, num_type_mono, sequence_list, smiles_list):
     '''
     Crossover of polymers
 
@@ -280,6 +281,10 @@ def crossover(parent_list, pop_size, num_type_mono):
         number of polymers in each generation
     num_type_mono: int
         number of types of monomer per polymer
+    sequence_list: list
+        list of sequences
+    smiles_list: list
+        list of monomer SMILES
 
     Returns
     -------
@@ -291,10 +296,7 @@ def crossover(parent_list, pop_size, num_type_mono):
     # initialize new population with parents
     new_pop = deepcopy(parent_list)
 
-
-    counter = 0
-    duplicate_counter = 0
-    while counter <= num_children:
+    while len(new_pop) < num_children:
         #for child in range(num_children):
         # randomly select two parents (as indexes from parent list) to cross
         parent_a = random.randint(0, len(parent_list) - 1)
@@ -329,16 +331,14 @@ def crossover(parent_list, pop_size, num_type_mono):
         #new_pop.append(temp_child)
         #counter += 1
 
+        # mutate
+        temp_child = mutate(temp_child, sequence_list, smiles_list)
+
         #try to avoid duplicates in population, but prevent infinite loop if unique individual not found after so many attempts
-        if duplicate_counter > len(parent_list):
-            new_pop.append(temp_child)
-            counter += 1
-        elif temp_child in new_pop:
-            duplicate_counter += 1
+        if temp_child in new_pop:
             pass
         else:
             new_pop.append(temp_child)
-            counter += 1
 
     return new_pop
 
@@ -387,7 +387,7 @@ def main():
     num_type_mono = 2
     # minimum difference between two successive generation values to declare convergence
     convergence_std = 0.001
-
+#print SMILES string of max polymer
     min_std = 3434
 
     # property of interest (options: molecular weight 'mw', dipole moment 'dip')
@@ -472,13 +472,13 @@ def main():
         population = parent_select(opt_property, population, poly_property_list)
 
         #Crossover - create children to repopulate bottom 50% of polymers in population
-        population = crossover(population, pop_size, num_type_mono)
+        population = crossover_mutate(population, pop_size, num_type_mono, sequence_list, smiles_list)
 
         #find starting place for children (second half of population)
-        child_start = int(len(population)/2)+1
+        #child_start = int(len(population)/2)+1
         #Mutation
-        for polymer in population[child_start:]:
-            polymer = mutate(polymer, sequence_list, smiles_list)
+        #for polymer in population[child_start:]:
+            #polymer = mutate(polymer, sequence_list, smiles_list)
 
         if opt_property == "mw":
             poly_property_list = find_poly_mw(population, poly_size, mw_list)
@@ -494,6 +494,10 @@ def main():
 
         write_file.write("{} {} {}\n".format(min_test, avg_test, max_test))
         print(min_test, max_test, avg_test)
+
+        #print SMILES string of max polymer
+        #index = poly_property_list.index(max_test)
+        #print(construct_polymer_string(population[index], smiles_list, poly_size))
 
         #print(min_test)
 
