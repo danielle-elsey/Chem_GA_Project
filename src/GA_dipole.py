@@ -399,7 +399,9 @@ def main():
     opt_property = "dip"
 
     # Read in monomers from input file
-    read_file = open('../input_files/1235MonomerList.txt', 'r')
+    #read_file = open('../input_files/1235MonomerList.txt', 'r')
+    read_file = open('ihome/ghutchison/dch45/Chem_GA_Project/input_files/1235MonomerList.txt', 'r')
+
 
     # create list of monomer SMILES strings
     # assumes input file has one monomer per line
