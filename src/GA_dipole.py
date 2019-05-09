@@ -135,7 +135,6 @@ def make_pop_readable(population, sequence_list, smiles_list):
         list of sequences
     smiles_list: list
         list of monomer SMILES
-Sanny has been having trouble sleeping without a light on at night, and a little plug in light doesn’t cut it for him. I found this big night light on Amazon and
     Returns
     -------
     readable_poly: list
@@ -345,7 +344,7 @@ def crossover_mutate(parent_list, pop_size, num_type_mono, sequence_list, smiles
 
 def construct_polymer_string(polymer, smiles_list, poly_size):
     '''
-    Construction of polymer from monomers
+    Construction of polymer from monomers, adds standard end groups [amino and nitro]
 
     Parameters
     ---------
@@ -363,6 +362,9 @@ def construct_polymer_string(polymer, smiles_list, poly_size):
     '''
     poly_string = ''
 
+    #add amino end group
+    poly_string = poly_string + "N"
+
     cycle = 0
     # loop over total monomers in each polymer
     for i in range(poly_size):
@@ -375,19 +377,22 @@ def construct_polymer_string(polymer, smiles_list, poly_size):
         monomer_index = polymer[seq_monomer_index + 1]
         poly_string = poly_string + smiles_list[monomer_index]
 
+    #add nitro end group
+    poly_string = poly_string + "N(=O)=O"
+
     return poly_string
 
 
 def main():
     # number of polymers in population
-    pop_size = 10
+    pop_size = 32
     # number of monomers per polymer
-    poly_size = 5
+    poly_size = 6
     # number of types of monomers in each polymer
     num_type_mono = 2
     # minimum difference between two successive generation values to declare convergence
     convergence_std = 0.001
-#print SMILES string of max polymer
+
     min_std = 3434
 
     # property of interest (options: molecular weight 'mw', dipole moment 'dip')
@@ -456,7 +461,7 @@ def main():
 
     # create new output read_file
     write_file = open("ga_polymer_output.txt", "w+")
-    write_file.write("min avg max\n")
+    write_file.write("min max avg\n")
 
     #Loop
     last_min = 0
@@ -492,7 +497,7 @@ def main():
         max_test = max(poly_property_list)
         avg_test = mean(poly_property_list)
 
-        write_file.write("{} {} {}\n".format(min_test, avg_test, max_test))
+        write_file.write("{} {} {}\n".format(min_test, max_test, avg_test))
         print(min_test, max_test, avg_test)
 
         #print SMILES string of max polymer
