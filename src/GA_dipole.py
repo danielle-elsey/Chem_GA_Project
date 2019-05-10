@@ -400,7 +400,7 @@ def main():
 
     # Read in monomers from input file
     #read_file = open('../input_files/1235MonomerList.txt', 'r')
-    read_file = open('ihome/ghutchison/dch45/Chem_GA_Project/input_files/1235MonomerList.txt', 'r')
+    read_file = open('/ihome/ghutchison/dch45/Chem_GA_Project/input_files/1235MonomerList.txt', 'r')
 
 
     # create list of monomer SMILES strings
@@ -462,15 +462,15 @@ def main():
     avg_test = (max_test - min_test) / 2.0
 
     # create new output read_file
-    write_file = open("ga_polymer_output.txt", "w+")
-    write_file.write("min max avg\n")
+    write_file = open("/ihome/ghutchison/dch45/Chem_GA_Project/src/ga_polymer_output.txt", "w+")
+    write_file.write("min, max, avg, \n")
 
     #Loop
     last_min = 0
     #print(last_min, min_test)
     #while (min_test < min_std):
     #while(abs(last_min-min_test) > convergence_std):
-    for x in range(20):
+    for x in range(200):
 
         #last_min = min_test
 
@@ -498,8 +498,13 @@ def main():
         min_test = min(poly_property_list)
         max_test = max(poly_property_list)
         avg_test = mean(poly_property_list)
+	
+        population_string = ''
+        for polymer in population:
+            poly_string = construct_polymer_string(polymer, smiles_list, poly_size)
+            population_string = population_string + poly_string + ", "
 
-        write_file.write("{} {} {}\n".format(min_test, max_test, avg_test))
+        write_file.write("{}, {}, {}, {} \n".format(min_test, max_test, avg_test, population_string))
         print(min_test, max_test, avg_test)
 
         #print SMILES string of max polymer
