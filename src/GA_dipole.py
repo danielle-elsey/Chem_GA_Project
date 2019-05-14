@@ -9,6 +9,7 @@ import random
 import math
 import pybel#print SMILES string of max polymer
 import numpy as np
+from scipy import stats
 from statistics import mean
 from itertools import product
 from copy import deepcopy
@@ -227,7 +228,7 @@ def parent_select(opt_property, population, poly_property_list):
     return parent_list
 
 
-def mutate(polymer, sequence_list, smiles_list):
+def mutate(polymer, sequence_list, smiles_list, mono_list):
     '''
     Mutates polymer
 
@@ -263,12 +264,16 @@ def mutate(polymer, sequence_list, smiles_list):
             0, len(sequence_list) - 1)]
     # or replace specific monomer
     else:
-        polymer[point] = random.randint(0, len(smiles_list) - 1)
+        new_mono = random.randint(0, len(smiles_list) - 1)
+        polymer[point] = new_mono
+        # increase frequency count for monomer in mono_list
+        mono_list[new_mono][1] += 1
+
 
     return polymer
 
 
-def crossover_mutate(parent_list, pop_size, num_type_mono, sequence_list, smiles_list):
+def crossover_mutate(parent_list, pop_size, num_type_mono, sequence_list, smiles_list, mono_list):
     '''
     Crossover of polymers
 
@@ -291,11 +296,11 @@ def crossover_mutate(parent_list, pop_size, num_type_mono, sequence_list, smiles
         crossover population list
     '''
     # calculate number of children to generate
-    num_children = pop_size - len(parent_list)
+    #num_children = pop_size - len(parent_list)
     # initialize new population with parents
     new_pop = deepcopy(parent_list)
 
-    while len(new_pop) < num_children:
+    while len(new_pop) < pop_size:
         #for child in range(num_children):
         # randomly select two parents (as indexes from parent list) to cross
         parent_a = random.randint(0, len(parent_list) - 1)
@@ -331,7 +336,7 @@ def crossover_mutate(parent_list, pop_size, num_type_mono, sequence_list, smiles
         #counter += 1
 
         # mutate
-        temp_child = mutate(temp_child, sequence_list, smiles_list)
+        temp_child = mutate(temp_child, sequence_list, smiles_list, mono_list)
 
         #try to avoid duplicates in population, but prevent infinite loop if unique individual not found after so many attempts
         if temp_child in new_pop:
@@ -340,6 +345,33 @@ def crossover_mutate(parent_list, pop_size, num_type_mono, sequence_list, smiles
             new_pop.append(temp_child)
 
     return new_pop
+
+def make_mono_indicies_list(mono_list):
+    '''
+    Make list of monomer indicies ordered by frequency (highest first)
+
+    Parameters
+    ---------
+    mono_list: list (specific format)
+        [[monomer index, frequency]]
+
+    Returns
+    -------
+    mono_indicies: list
+        list of monomer indicies ordered by frequency (highest first)
+    '''
+
+    ordered_mono_list = deepcopy(mono_list)
+
+    # sort based on frequencies, put in descending order (highest first)
+    ordered_mono_list = sorted(ordered_mono_list, key = lambda monomer: monomer[1], reverse = True)
+
+    # make list of monomer indicies only (in order of descending frequency)
+    mono_indicies = []
+    for x in range(len(ordered_mono_list)):
+        mono_indicies.append(ordered_mono_list[x][0])
+
+    return mono_indicies
 
 
 def construct_polymer_string(polymer, smiles_list, poly_size):
@@ -390,17 +422,17 @@ def main():
     poly_size = 6
     # number of types of monomers in each polymer
     num_type_mono = 2
-    # minimum difference between two successive generation values to declare convergence
-    convergence_std = 0.001
 
+
+    #true mw max for 1235MonomerList.txt w pop_size = 10 poly_size = 5
     min_std = 3434
 
     # property of interest (options: molecular weight 'mw', dipole moment 'dip')
-    opt_property = "dip"
+    opt_property = "mw"
 
     # Read in monomers from input file
-    #read_file = open('../input_files/1235MonomerList.txt', 'r')
-    read_file = open('/ihome/ghutchison/dch45/Chem_GA_Project/input_files/1235MonomerList.txt', 'r')
+    read_file = open('../input_files/1235MonomerList.txt', 'r')
+    #read_file = open('/ihome/ghutchison/dch45/Chem_GA_Project/input_files/1235MonomerList.txt', 'r')
 
 
     # create list of monomer SMILES strings
@@ -413,8 +445,15 @@ def main():
 
     read_file.close()
 
+    #create monomer list [(mono index 1, frequency), (mono index 2, frequency),...]
+
+    mono_list = []
+    for x in range(len(smiles_list)):
+        mono_list.append([x, 0])
+
     # create all possible numerical sequences for given number of monomer types
     sequence_list = find_sequences(num_type_mono)
+
 
     # create inital population as list of polymers
     population = []
@@ -423,14 +462,17 @@ def main():
         # for polymer in range(pop_size):
         temp_poly = []
 
-        # select sequence type for polymer
+        # select sequence type for polymerf
         poly_seq = sequence_list[random.randint(0, len(sequence_list) - 1)]
         temp_poly.append(poly_seq)
 
         # select monomer types for polymer
         for num in range(num_type_mono):
+            # randomly select a monomer index
             poly_monomer = random.randint(0, len(smiles_list) - 1)
             temp_poly.append(poly_monomer)
+            # increase frequency count for monomer in mono_list
+            mono_list[poly_monomer][1] += 1
 
         # add polymer to population
         # check for duplication
@@ -462,30 +504,29 @@ def main():
     avg_test = (max_test - min_test) / 2.0
 
     # create new output read_file
-    write_file = open("/ihome/ghutchison/dch45/Chem_GA_Project/src/ga_polymer_output.txt", "w+")
-    write_file.write("min, max, avg, \n")
+    #write_file = open("/ihome/ghutchison/dch45/Chem_GA_Project/src/ga_polymer_output.txt", "w+")
+    #write_file.write("min, max, avg, \n")
 
-    #Loop
-    last_min = 0
-    #print(last_min, min_test)
-    #while (min_test < min_std):
-    #while(abs(last_min-min_test) > convergence_std):
-    for x in range(200):
+    # Loop
+    #while (max_test < min_std):
+    #for x in range(20):
 
-        #last_min = min_test
+    # check for convergence among top 10% (or top 8, whichever is larger) candidates between 5 generations
+    n = int(pop_size*0.1)
+    if n < 8:
+        n = 8
+    conv_counter = 0
+    while conv_counter < 25:
 
-        #Selection - select best 50% as parents
-        #select heaviest (best) 50% of polymers as parents
+        # created sorted monomer list so most frequent are first
+        ordered_mono_idx1 = make_mono_indicies_list(mono_list)
+
+        # Selection - select heaviest (best) 50% of polymers as parents
         population = parent_select(opt_property, population, poly_property_list)
 
-        #Crossover - create children to repopulate bottom 50% of polymers in population
-        population = crossover_mutate(population, pop_size, num_type_mono, sequence_list, smiles_list)
+        # Crossover & Mutation - create children to repopulate bottom 50% of polymers in population
+        population = crossover_mutate(population, pop_size, num_type_mono, sequence_list, smiles_list, mono_list)
 
-        #find starting place for children (second half of population)
-        #child_start = int(len(population)/2)+1
-        #Mutation
-        #for polymer in population[child_start:]:
-            #polymer = mutate(polymer, sequence_list, smiles_list)
 
         if opt_property == "mw":
             poly_property_list = find_poly_mw(population, poly_size, mw_list)
@@ -494,27 +535,48 @@ def main():
         else:
             print("Error: opt_property not recognized. trace:main:loop pop properties")
 
-        #find minimum polymer weight
+        # find minimum polymer weight
         min_test = min(poly_property_list)
         max_test = max(poly_property_list)
         avg_test = mean(poly_property_list)
-	
+
         population_string = ''
         for polymer in population:
             poly_string = construct_polymer_string(polymer, smiles_list, poly_size)
             population_string = population_string + poly_string + ", "
 
-        write_file.write("{}, {}, {}, {} \n".format(min_test, max_test, avg_test, population_string))
-        print(min_test, max_test, avg_test)
+        #write_file.write("{}, {}, {}, {} \n".format(min_test, max_test, avg_test, population_string))
+        #print(min_test, max_test, avg_test)
 
-        #print SMILES string of max polymer
+
+        # created sorted monomer list so most frequent are first
+        ordered_mono_idx2 = make_mono_indicies_list(mono_list)
+
+        # calculate Spearman correlation coefficient
+
+        spear = stats.spearmanr(ordered_mono_idx1[:10], ordered_mono_idx2[:10])[0]
+        print(ordered_mono_idx1[:10])
+        print(ordered_mono_idx2[:10])
+        print(spear)
+
+
+        # keep track of number of successive generations meeting Spearman criterion
+        if spear > 0.998:
+            conv_counter += 1
+        else:
+            conv_counter = 0
+
+
+        # print SMILES string of max polymer
         #index = poly_property_list.index(max_test)
         #print(construct_polymer_string(population[index], smiles_list, poly_size))
 
         #print(min_test)
 
 
-    write_file.close()
+    #write_file.close()
+
+    print(max_test)
 
     '''
     #Print out SMILES strings meeting MW criteria
