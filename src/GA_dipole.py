@@ -125,11 +125,14 @@ def find_poly_dipole(population, poly_size, smiles_list):
         # write polymer .xyz file to containing folder
         mol.write("xyz", "polymer{}.xyz".format(i), overwrite=True)
 
-        buffer = subprocess.getoutput('xtb -opt polymer{}.xyz'.format(i))
+        # buffer = subprocess.getoutput('xtb -opt polymer{}.xyz'.format(i))
+        buffer = subprocess.getoutput('/ihome/ghutchison/geoffh/xtb/xtb polymer{}.xyz -opt >polymer{}.out'.format(i, i))
+        
+        # write output to read_file
+        #write_file = open("/ihome/ghutchison/dch45/polymer{}.out".format(i), "w+")
+        #write_file.write(buffer)
+        #write_file.close()
 
-        #write output to read_file
-        write_file = open("/ihome/ghutchison/dch45/Chem_GA_Project/src/polymer{}.out".format(i), "w+")
-                
         read_output = open('polymer{}.out'.format(i), 'r')
 
         # parse output file for static polarizability and dipole moment
@@ -149,7 +152,7 @@ def find_poly_dipole(population, poly_size, smiles_list):
                 # break inner for loop to avoid overwriting with other lines starting with "full"
                 break
 
-        read_file.close()
+        read_output.close()
 
     return poly_dipole_list
 
@@ -459,11 +462,11 @@ def main():
     min_std = 3434
 
     # property of interest (options: molecular weight 'mw', dipole moment 'dip')
-    opt_property = "mw"
+    opt_property = "dip"
 
     # Read in monomers from input file
-    read_file = open('../input_files/1235MonomerList.txt', 'r')
-    #read_file = open('/ihome/ghutchison/dch45/Chem_GA_Project/input_files/1235MonomerList.txt', 'r')
+    # read_file = open('../input_files/1235MonomerList.txt', 'r')
+    read_file = open('/ihome/ghutchison/dch45/Chem_GA_Project/input_files/1235MonomerList.txt', 'r')
 
 
     # create list of monomer SMILES strings
