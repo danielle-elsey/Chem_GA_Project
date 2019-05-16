@@ -94,6 +94,7 @@ def find_poly_mw(population, poly_size, mw_list):
 def find_poly_dipole(population, poly_size, smiles_list):
     '''
     Calculates dipole of polymers
+    TODO: add functionality to use polarizability calculations
 
     Parameters
     ---------
@@ -108,18 +109,45 @@ def find_poly_dipole(population, poly_size, smiles_list):
     -------
     poly_dipole_list: list
         list of polymer dipoles
-    '''#print SMILES string of max polymer
-    poly_dipole_list = []
-    for polymer in population:
+    '''
+    # create polymer input files
+    for i, polymer in enumerate(population):
         poly_smiles = construct_polymer_string(polymer, smiles_list, poly_size)
+
+        # make polymer into openbabel object
         mol = pybel.readstring("smi", poly_smiles)
         make3D(mol)
-        cm = ob.OBChargeModel_FindType('mmff94')
-        cm.ComputeCharges(mol.OBMol)
-        diptensor = cm.GetDipoleMoment(mol.OBMol)
-        dipole = math.sqrt(diptensor.GetX()**2 +
-                           diptensor.GetY()**2 + diptensor.GetZ()**2)
-        poly_dipole_list.append(dipole)
+
+        # write polymer .xyz file to containing folder
+        mol.write("xyz", "polymer{}.xyz".format(i))
+
+    # run geometry optimization script from containing folder on all .xyz files
+    os.system('sbatch xtb-opt.slurm')
+
+    poly_polar_list = []
+    poly_dipole_list = []
+    for i in range(len(population)):
+        read_output = open('polymer{}.out'.format(i), 'r'
+        )
+        # parse output file for static polarizability and dipole moment
+        for line in read_output:
+            # create list of tokens in line
+            tokens = line.split()
+
+            if line.startswith(" Mol. α(0)"):
+                temp_polar = tokens[4]
+                poly_polar_list.append(temp_polar)
+            elif line.startswith("   full:"):
+                # dipole tensor
+                # TODO: add tensor functionality later
+                dipole_line = tokens
+                temp_dipole = tokens[4]
+                poly_dipole_list.append(temp_dipole)
+                # break inner for loop to avoid overwriting with other lines starting with "full"
+                break
+
+        read_file.close()
+
     return poly_dipole_list
 
 
@@ -546,7 +574,7 @@ def main():
             population_string = population_string + poly_string + ", "
 
         #write_file.write("{}, {}, {}, {} \n".format(min_test, max_test, avg_test, population_string))
-        #print(min_test, max_test, avg_test)
+        print(min_test, max_test, avg_test)
 
 
         # created sorted monomer list so most frequent are first
@@ -554,10 +582,10 @@ def main():
 
         # calculate Spearman correlation coefficient
 
-        spear = stats.spearmanr(ordered_mono_idx1[:10], ordered_mono_idx2[:10])[0]
-        print(ordered_mono_idx1[:10])
-        print(ordered_mono_idx2[:10])
-        print(spear)
+        spear = stats.spearmanr(ordered_mono_idx1[:n], ordered_mono_idx2[:n])[0]
+        #print(ordered_mono_idx1[:10])
+        #print(ordered_mono_idx2[:10])
+        #print(spear)
 
 
         # keep track of number of successive generations meeting Spearman criterion
