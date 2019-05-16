@@ -4,6 +4,7 @@ Notes:
 -population is list of these polymers
 '''
 
+import subprocess
 import string
 import random
 import math
@@ -110,7 +111,10 @@ def find_poly_dipole(population, poly_size, smiles_list):
     poly_dipole_list: list
         list of polymer dipoles
     '''
-    # create polymer input files
+
+    poly_polar_list = []
+    poly_dipole_list = []
+
     for i, polymer in enumerate(population):
         poly_smiles = construct_polymer_string(polymer, smiles_list, poly_size)
 
@@ -119,16 +123,15 @@ def find_poly_dipole(population, poly_size, smiles_list):
         make3D(mol)
 
         # write polymer .xyz file to containing folder
-        mol.write("xyz", "polymer{}.xyz".format(i))
+        mol.write("xyz", "polymer{}.xyz".format(i), overwrite=True)
 
-    # run geometry optimization script from containing folder on all .xyz files
-    os.system('sbatch xtb-opt.slurm')
+        buffer = subprocess.getoutput('xtb -opt polymer{}.xyz'.format(i))
 
-    poly_polar_list = []
-    poly_dipole_list = []
-    for i in range(len(population)):
-        read_output = open('polymer{}.out'.format(i), 'r'
-        )
+        #write output to read_file
+        write_file = open("/ihome/ghutchison/dch45/Chem_GA_Project/src/polymer{}.out".format(i), "w+")
+                
+        read_output = open('polymer{}.out'.format(i), 'r')
+
         # parse output file for static polarizability and dipole moment
         for line in read_output:
             # create list of tokens in line
