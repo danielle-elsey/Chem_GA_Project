@@ -10,6 +10,7 @@ import random
 import math
 import pybel#print SMILES string of max polymer
 import numpy as np
+import multiprocessing as mp
 from scipy import stats
 from statistics import mean
 from itertools import product
@@ -91,6 +92,39 @@ def find_poly_mw(population, poly_size, mw_list):
         poly_mw_list.append(temp_mw)
     return poly_mw_list
 
+def run_geo_opt(i, polymer, smiles_list, poly_size):
+    '''
+    Runs geometry optimization calculation
+
+    Parameters
+    ---------
+    i: int
+        index of polymer
+    polymer: [(#,#,#,#), A, B]
+        ???
+    poly_size: int
+        number of monomers per polymer
+    smiles_list: list
+        list of monomer SMILES
+
+    Returns
+    -------
+    poly_dipole_list: list
+        list of polymer dipoles
+    '''
+
+    poly_smiles = construct_polymer_string(polymer, smiles_list, poly_size)
+
+    # make polymer into openbabel object
+    mol = pybel.readstring("smi", poly_smiles)
+    make3D(mol)
+
+    # write polymer .xyz file to containing folder
+    mol.write("xyz", "polymer{}.xyz".format(i), overwrite=True)
+
+    # buffer = subprocess.getoutput('xtb -opt polymer{}.xyz'.format(i))
+    buffer = subprocess.getoutput('/ihome/ghutchison/geoffh/xtb/xtb polymer{}.xyz -opt >polymer{}.out'.format(i, i))
+
 
 def find_poly_dipole(population, poly_size, smiles_list):
     '''
@@ -115,6 +149,12 @@ def find_poly_dipole(population, poly_size, smiles_list):
     poly_polar_list = []
     poly_dipole_list = []
 
+    # set to run calculations on 4 cores
+    pool = mp.Pool(4)
+
+    [pool.map(run_geo_opt, args=(i, polymer, smiles_list, poly_size)) for i, polymer in enumerate(population)]
+
+    '''
     for i, polymer in enumerate(population):
         poly_smiles = construct_polymer_string(polymer, smiles_list, poly_size)
 
@@ -127,12 +167,8 @@ def find_poly_dipole(population, poly_size, smiles_list):
 
         # buffer = subprocess.getoutput('xtb -opt polymer{}.xyz'.format(i))
         buffer = subprocess.getoutput('/ihome/ghutchison/geoffh/xtb/xtb polymer{}.xyz -opt >polymer{}.out'.format(i, i))
-        
-        # write output to read_file
-        #write_file = open("/ihome/ghutchison/dch45/polymer{}.out".format(i), "w+")
-        #write_file.write(buffer)
-        #write_file.close()
-
+    '''
+    for i, polymer in enumerate(population):
         read_output = open('polymer{}.out'.format(i), 'r')
 
         # parse output file for static polarizability and dipole moment
@@ -141,13 +177,13 @@ def find_poly_dipole(population, poly_size, smiles_list):
             tokens = line.split()
 
             if line.startswith(" Mol. α(0)"):
-                temp_polar = tokens[4]
+                temp_polar = float(tokens[4])
                 poly_polar_list.append(temp_polar)
             elif line.startswith("   full:"):
-                # dipole tensor
+                # dipole tensor - STILL A LIST OF STRINGS (not floats)
                 # TODO: add tensor functionality later
                 dipole_line = tokens
-                temp_dipole = tokens[4]
+                temp_dipole = float(tokens[4])
                 poly_dipole_list.append(temp_dipole)
                 # break inner for loop to avoid overwriting with other lines starting with "full"
                 break
@@ -462,11 +498,11 @@ def main():
     min_std = 3434
 
     # property of interest (options: molecular weight 'mw', dipole moment 'dip')
-    opt_property = "dip"
+    opt_property = "mw"
 
     # Read in monomers from input file
-    # read_file = open('../input_files/1235MonomerList.txt', 'r')
-    read_file = open('/ihome/ghutchison/dch45/Chem_GA_Project/input_files/1235MonomerList.txt', 'r')
+    read_file = open('../input_files/1235MonomerList.txt', 'r')
+    # read_file = open('/ihome/ghutchison/dch45/Chem_GA_Project/input_files/1235MonomerList.txt', 'r')
 
 
     # create list of monomer SMILES strings
@@ -543,17 +579,19 @@ def main():
 
     # Loop
     #while (max_test < min_std):
-    #for x in range(20):
+    for x in range(1):
 
     # check for convergence among top 10% (or top 8, whichever is larger) candidates between 5 generations
-    n = int(pop_size*0.1)
-    if n < 8:
-        n = 8
-    conv_counter = 0
-    while conv_counter < 25:
+
+    #n = int(pop_size*0.1)
+    #if n < 8:
+        #n = 8
+    #conv_counter = 0
+    #while conv_counter < 25:
 
         # created sorted monomer list so most frequent are first
-        ordered_mono_idx1 = make_mono_indicies_list(mono_list)
+        #ordered_mono_idx1 = make_mono_indicies_list(mono_list)
+
 
         # Selection - select heaviest (best) 50% of polymers as parents
         population = parent_select(opt_property, population, poly_property_list)
@@ -582,24 +620,26 @@ def main():
         #write_file.write("{}, {}, {}, {} \n".format(min_test, max_test, avg_test, population_string))
         print(min_test, max_test, avg_test)
 
-
+        '''
         # created sorted monomer list so most frequent are first
         ordered_mono_idx2 = make_mono_indicies_list(mono_list)
 
         # calculate Spearman correlation coefficient
 
         spear = stats.spearmanr(ordered_mono_idx1[:n], ordered_mono_idx2[:n])[0]
+        '''
         #print(ordered_mono_idx1[:10])
         #print(ordered_mono_idx2[:10])
         #print(spear)
 
 
         # keep track of number of successive generations meeting Spearman criterion
+        '''
         if spear > 0.998:
             conv_counter += 1
         else:
             conv_counter = 0
-
+        '''
 
         # print SMILES string of max polymer
         #index = poly_property_list.index(max_test)
@@ -610,7 +650,7 @@ def main():
 
     #write_file.close()
 
-    print(max_test)
+    print(poly_property_list)
 
     '''
     #Print out SMILES strings meeting MW criteria
