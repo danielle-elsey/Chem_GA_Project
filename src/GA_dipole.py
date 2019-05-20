@@ -109,11 +109,10 @@ def run_geo_opt(i, polymer, smiles_list, poly_size):
 
     Returns
     -------
-    poly_dipole_list: list
-        list of polymer dipoles
+    N/A
     '''
 
-    poly_smiles = construct_polymer_string(polymer, smiles_list, poly_size)
+    poly_smiles = construct_polymer_string(polymer, smiles_list, poly_size, counter)
 
     # make polymer into openbabel object
     mol = pybel.readstring("smi", poly_smiles)
@@ -123,7 +122,12 @@ def run_geo_opt(i, polymer, smiles_list, poly_size):
     mol.write("xyz", "polymer{}.xyz".format(i), overwrite=True)
 
     # buffer = subprocess.getoutput('xtb -opt polymer{}.xyz'.format(i))
-    buffer = subprocess.getoutput('/ihome/ghutchison/geoffh/xtb/xtb polymer{}.xyz -opt >polymer{}.out'.format(i, i))
+    subprocess.getoutput('/ihome/ghutchison/geoffh/xtb/xtb polymer{}.xyz -opt >polymer{}.out'.format(i, i))
+
+    counter += 1
+    print(counter)
+
+    return
 
 
 def find_poly_dipole(population, poly_size, smiles_list):
@@ -150,9 +154,11 @@ def find_poly_dipole(population, poly_size, smiles_list):
     poly_dipole_list = []
 
     # set to run calculations on 4 cores
+    # NOTE: must specify use of 5 cpu's in SLURM script, so that one can continue running GA script
     pool = mp.Pool(4)
 
-    [pool.map(run_geo_opt, args=(i, polymer, smiles_list, poly_size)) for i, polymer in enumerate(population)]
+    counter = 0
+    [pool.apply(run_geo_opt, args=(i, polymer, smiles_list, poly_size, counter)) for i, polymer in enumerate(population)]
 
     '''
     for i, polymer in enumerate(population):
@@ -498,11 +504,11 @@ def main():
     min_std = 3434
 
     # property of interest (options: molecular weight 'mw', dipole moment 'dip')
-    opt_property = "mw"
+    opt_property = "dip"
 
     # Read in monomers from input file
-    read_file = open('../input_files/1235MonomerList.txt', 'r')
-    # read_file = open('/ihome/ghutchison/dch45/Chem_GA_Project/input_files/1235MonomerList.txt', 'r')
+    # read_file = open('../input_files/1235MonomerList.txt', 'r')
+    read_file = open('/ihome/ghutchison/dch45/Chem_GA_Project/input_files/1235MonomerList.txt', 'r')
 
 
     # create list of monomer SMILES strings
