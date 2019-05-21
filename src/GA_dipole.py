@@ -92,7 +92,7 @@ def find_poly_mw(population, poly_size, mw_list):
         poly_mw_list.append(temp_mw)
     return poly_mw_list
 
-def run_geo_opt(i, polymer, smiles_list, poly_size):
+def run_geo_opt(i, polymer, smiles_list, poly_size, counter):
     '''
     Runs geometry optimization calculation
 
@@ -112,7 +112,7 @@ def run_geo_opt(i, polymer, smiles_list, poly_size):
     N/A
     '''
 
-    poly_smiles = construct_polymer_string(polymer, smiles_list, poly_size, counter)
+    poly_smiles = construct_polymer_string(polymer, smiles_list, poly_size)
 
     # make polymer into openbabel object
     mol = pybel.readstring("smi", poly_smiles)
