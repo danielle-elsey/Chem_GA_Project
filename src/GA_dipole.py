@@ -92,7 +92,7 @@ def find_poly_mw(population, poly_size, mw_list):
         poly_mw_list.append(temp_mw)
     return poly_mw_list
 
-def run_geo_opt(i, polymer, smiles_list, poly_size, counter):
+def run_geo_opt(i, polymer, smiles_list, poly_size):
     '''
     Runs geometry optimization calculation
 
@@ -122,13 +122,11 @@ def run_geo_opt(i, polymer, smiles_list, poly_size, counter):
     mol.write("xyz", "polymer{}.xyz".format(i), overwrite=True)
 
     # buffer = subprocess.getoutput('xtb -opt polymer{}.xyz'.format(i))
-    subprocess.getoutput('/ihome/ghutchison/geoffh/xtb/xtb polymer{}.xyz -opt >polymer{}.out'.format(i, i))
-
-    counter += 1
-    print(counter)
-
-    return
-
+    #subprocess.getoutput('/ihome/ghutchison/geoffh/xtb/xtb polymer{}.xyz -opt >polymer{}.out'.format(i, i))
+    pmer = 'polymer'
+    subprocess.call([]'/ihome/ghutchison/geoffh/xtb/xtb polymer{}.xyz -opt >polymer{}.out'.format(i, i))
+    
+    return i
 
 def find_poly_dipole(population, poly_size, smiles_list):
     '''
@@ -155,15 +153,17 @@ def find_poly_dipole(population, poly_size, smiles_list):
 
     # set to run calculations on 4 cores
     # NOTE: must specify use of 5 cpu's in SLURM script, so that one can continue running GA script
-    pool = mp.Pool(4)
+    pool = mp.Pool(2)
 
-    counter = 0
-    [pool.apply(run_geo_opt, args=(i, polymer, smiles_list, poly_size, counter)) for i, polymer in enumerate(population)]
+    results = [pool.apply_async(run_geo_opt, args=(i, polymer, smiles_list, poly_size)) for i, polymer in enumerate(population)]
+    print([p.get() for p in results])
+    print('Done Running XTB')
+    
 
     '''
     for i, polymer in enumerate(population):
         poly_smiles = construct_polymer_string(polymer, smiles_list, poly_size)
-
+[p.get() for p in results]
         # make polymer into openbabel object
         mol = pybel.readstring("smi", poly_smiles)
         make3D(mol)
@@ -195,7 +195,7 @@ def find_poly_dipole(population, poly_size, smiles_list):
                 break
 
         read_output.close()
-
+    print(poly_dipole_list)
     return poly_dipole_list
 
 
@@ -493,7 +493,7 @@ def construct_polymer_string(polymer, smiles_list, poly_size):
 
 def main():
     # number of polymers in population
-    pop_size = 32
+    pop_size = 4
     # number of monomers per polymer
     poly_size = 6
     # number of types of monomers in each polymer
@@ -570,6 +570,7 @@ def main():
         poly_property_list = find_poly_mw(population, poly_size, mw_list)
     elif opt_property == "dip":
         # calculate dipole moments for each polymer
+        print("population:", population)
         poly_property_list = find_poly_dipole(population, poly_size, smiles_list)
     else:
         print("Error: opt_property not recognized. trace:main:initial pop properties")
