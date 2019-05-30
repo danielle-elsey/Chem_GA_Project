@@ -8,13 +8,14 @@ import subprocess
 import string
 import random
 import math
-import pybel#print SMILES string of max polymer
+import pybel
 import numpy as np
 import multiprocessing as mp
 from scipy import stats
 from statistics import mean
 from itertools import product
 from copy import deepcopy
+import os
 
 ob = pybel.ob
 
@@ -117,16 +118,22 @@ def run_geo_opt(i, polymer, smiles_list, poly_size):
     # make polymer into openbabel object
     mol = pybel.readstring("smi", poly_smiles)
     make3D(mol)
-
+    os.system('mkdir {}'.format(i))
     # write polymer .xyz file to containing folder
-    mol.write("xyz", "polymer{}.xyz".format(i), overwrite=True)
+    mol.write("xyz", "{}/polymer{}.xyz".format(i, i), overwrite=True)
 
     # buffer = subprocess.getoutput('xtb -opt polymer{}.xyz'.format(i))
     #subprocess.getoutput('/ihome/ghutchison/geoffh/xtb/xtb polymer{}.xyz -opt >polymer{}.out'.format(i, i))
-    pmer = 'polymer'
-    subprocess.call([]'/ihome/ghutchison/geoffh/xtb/xtb polymer{}.xyz -opt >polymer{}.out'.format(i, i))
-    
+    pmerin = 'polymer{}.xyz'.format(i)
+    pmerout = '>polymer{}.out'.format(i)
+#     subprocess.run(['/ihome/ghutchison/geoffh/xtb/xtb', pmerin, '-opt', pmerout])
+    #os.system('/ihome/ghutchison/geoffh/xtb/xtb {}/polymer{}.xyz -opt >{}/polymer{}.out'.format(i, i, i, i))
+    os.system('cd {} && /ihome/ghutchison/geoffh/xtb/xtb polymer{}.xyz -opt >polymer{}.out'.format(i, i, i))
+    os.system('mv {}/polymer{}* . && rm -r {}'.format(i, i, i))
+
+       
     return i
+
 
 def find_poly_dipole(population, poly_size, smiles_list):
     '''
@@ -156,14 +163,14 @@ def find_poly_dipole(population, poly_size, smiles_list):
     pool = mp.Pool(2)
 
     results = [pool.apply_async(run_geo_opt, args=(i, polymer, smiles_list, poly_size)) for i, polymer in enumerate(population)]
-    print([p.get() for p in results])
-    print('Done Running XTB')
+    results_list = [p.get() for p in results]
+    # print ("results_list", results_list)
+    # print('Done Running XTB')
     
-
+    
     '''
     for i, polymer in enumerate(population):
         poly_smiles = construct_polymer_string(polymer, smiles_list, poly_size)
-[p.get() for p in results]
         # make polymer into openbabel object
         mol = pybel.readstring("smi", poly_smiles)
         make3D(mol)
@@ -174,6 +181,7 @@ def find_poly_dipole(population, poly_size, smiles_list):
         # buffer = subprocess.getoutput('xtb -opt polymer{}.xyz'.format(i))
         buffer = subprocess.getoutput('/ihome/ghutchison/geoffh/xtb/xtb polymer{}.xyz -opt >polymer{}.out'.format(i, i))
     '''
+
     for i, polymer in enumerate(population):
         read_output = open('polymer{}.out'.format(i), 'r')
 
@@ -195,6 +203,8 @@ def find_poly_dipole(population, poly_size, smiles_list):
                 break
 
         read_output.close()
+    
+    print("population:", population)
     print(poly_dipole_list)
     return poly_dipole_list
 
@@ -656,7 +666,7 @@ def main():
 
 
     #write_file.close()
-
+    print('End population', population)
     print(poly_property_list)
 
     '''
