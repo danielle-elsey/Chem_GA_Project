@@ -4,6 +4,7 @@ Notes:
 -population is list of these polymers
 '''
 
+import os
 import subprocess
 import string
 import random
@@ -15,7 +16,7 @@ from scipy import stats
 from statistics import mean
 from itertools import product
 from copy import deepcopy
-import os
+import shlex
 
 ob = pybel.ob
 
@@ -112,27 +113,27 @@ def run_geo_opt(i, polymer, smiles_list, poly_size):
     -------
     N/A
     '''
-
+    
     poly_smiles = construct_polymer_string(polymer, smiles_list, poly_size)
 
-    # make polymer into openbabel object
-    mol = pybel.readstring("smi", poly_smiles)
+    # make polymer string into openbabel object
+    mol = pybel.readstring('smi', poly_smiles)
     make3D(mol)
-    os.system('mkdir {}'.format(i))
+    
+    # capture monomer indexes and numerical sequence as strings for file naming
+    mono1 = str(polymer[1])
+    mono2 = str(polymer[2])
+    seq = polymer[0]
+    # create string of actual length sequence (e.g. hexamer when poly_size = 6)
+    triple_seq = seq + seq + seq
+    true_length_seq = ''.join(str(triple_seq[i]) for i in range(poly_size))
+
     # write polymer .xyz file to containing folder
-    mol.write("xyz", "{}/polymer{}.xyz".format(i, i), overwrite=True)
-
-    # buffer = subprocess.getoutput('xtb -opt polymer{}.xyz'.format(i))
-    #subprocess.getoutput('/ihome/ghutchison/geoffh/xtb/xtb polymer{}.xyz -opt >polymer{}.out'.format(i, i))
-    pmerin = 'polymer{}.xyz'.format(i)
-    pmerout = '>polymer{}.out'.format(i)
-#     subprocess.run(['/ihome/ghutchison/geoffh/xtb/xtb', pmerin, '-opt', pmerout])
-    #os.system('/ihome/ghutchison/geoffh/xtb/xtb {}/polymer{}.xyz -opt >{}/polymer{}.out'.format(i, i, i, i))
-    os.system('cd {} && /ihome/ghutchison/geoffh/xtb/xtb polymer{}.xyz -opt >polymer{}.out'.format(i, i, i))
-    os.system('mv {}/polymer{}* . && rm -r {}'.format(i, i, i))
-
-       
-    return i
+    mol.write('xyz', 'input/%s_%s_%s.xyz' % (mono1, mono2, true_length_seq), overwrite=True)
+    
+    xtb = subprocess.call('(/ihome/ghutchison/geoffh/xtb/xtb input/%s_%s_%s.xyz --opt >output/%s_%s_%s.out)' % (mono1, mono2, true_length_seq, mono1, mono2, true_length_seq), shell=True)
+    save_file = subprocess.call('(cp xtbopt.xyz opt/%s_%s_%s_opt.xyz)' % (mono1, mono2, true_length_seq), shell=True)
+    del_restart = subprocess.call('(rm -f *restart)', shell=True)
 
 
 def find_poly_dipole(population, poly_size, smiles_list):
@@ -158,32 +159,19 @@ def find_poly_dipole(population, poly_size, smiles_list):
     poly_polar_list = []
     poly_dipole_list = []
 
-    # set to run calculations on 4 cores
-    # NOTE: must specify use of 5 cpu's in SLURM script, so that one can continue running GA script
-    pool = mp.Pool(2)
-
-    results = [pool.apply_async(run_geo_opt, args=(i, polymer, smiles_list, poly_size)) for i, polymer in enumerate(population)]
-    results_list = [p.get() for p in results]
-    # print ("results_list", results_list)
-    # print('Done Running XTB')
-    
-    
-    '''
+    # TODO: get rid of enumerate after implementing new naming system
     for i, polymer in enumerate(population):
-        poly_smiles = construct_polymer_string(polymer, smiles_list, poly_size)
-        # make polymer into openbabel object
-        mol = pybel.readstring("smi", poly_smiles)
-        make3D(mol)
-
-        # write polymer .xyz file to containing folder
-        mol.write("xyz", "polymer{}.xyz".format(i), overwrite=True)
-
-        # buffer = subprocess.getoutput('xtb -opt polymer{}.xyz'.format(i))
-        buffer = subprocess.getoutput('/ihome/ghutchison/geoffh/xtb/xtb polymer{}.xyz -opt >polymer{}.out'.format(i, i))
-    '''
-
-    for i, polymer in enumerate(population):
-        read_output = open('polymer{}.out'.format(i), 'r')
+        run_geo_opt(i, polymer, smiles_list, poly_size)
+        
+        # capture monomer indexes and numerical sequence as strings for file naming
+        mono1 = str(polymer[1])
+        mono2 = str(polymer[2])
+        seq = polymer[0]
+        # create string of actual length sequence (e.g. hexamer when poly_size = 6)
+        triple_seq = seq + seq + seq
+        true_length_seq = ''.join(str(triple_seq[i]) for i in range(poly_size))
+        
+        read_output = open('output/%s_%s_%s.out' % (mono1, mono2, true_length_seq), 'r')
 
         # parse output file for static polarizability and dipole moment
         for line in read_output:
@@ -193,19 +181,24 @@ def find_poly_dipole(population, poly_size, smiles_list):
             if line.startswith(" Mol. α(0)"):
                 temp_polar = float(tokens[4])
                 poly_polar_list.append(temp_polar)
+            '''
             elif line.startswith("   full:"):
-                # dipole tensor - STILL A LIST OF STRINGS (not floats)
-                # TODO: add tensor functionality later
-                dipole_line = tokens
-                temp_dipole = float(tokens[4])
-                poly_dipole_list.append(temp_dipole)
+                try:
+                    # dipole tensor - STILL A LIST OF STRINGS (not floats)
+                    # TODO: add tensor functionality later
+                    dipole_line = tokens
+                    temp_dipole = float(tokens[4])
+                    poly_dipole_list.append(temp_dipole)
+                else:
+                    poly_dipole_list.append(-10)
                 # break inner for loop to avoid overwriting with other lines starting with "full"
                 break
+             '''
 
         read_output.close()
-    
-    print("population:", population)
-    print(poly_dipole_list)
+
+    # print("calculated dipoles:", poly_dipole_list)
+    # print("calculated polarizabilities:", poly_polar_list)
     return poly_dipole_list
 
 
@@ -333,11 +326,11 @@ def mutate(polymer, sequence_list, smiles_list, mono_list):
         polymer string ???)
     '''
 
-    # determine whether to mutate (mutation rate is 1/3*1/3 = 1/9 or ~11%)
-    rand1 = random.randint(1,3)
-    rand2 = random.randint(1,3)
+    # determine whether to mutate
+    mut_rate = 0.6
+    rand = random.randint(1,10)
 
-    if rand1 == rand2:
+    if rand <= (mut_rate*10):
         pass
     else:
         return polymer
@@ -456,6 +449,8 @@ def make_mono_indicies_list(mono_list):
     mono_indicies = []
     for x in range(len(ordered_mono_list)):
         mono_indicies.append(ordered_mono_list[x][0])
+        
+    #print(mono_indicies)
 
     return mono_indicies
 
@@ -503,7 +498,7 @@ def construct_polymer_string(polymer, smiles_list, poly_size):
 
 def main():
     # number of polymers in population
-    pop_size = 4
+    pop_size = 32
     # number of monomers per polymer
     poly_size = 6
     # number of types of monomers in each polymer
@@ -514,7 +509,7 @@ def main():
     min_std = 3434
 
     # property of interest (options: molecular weight 'mw', dipole moment 'dip')
-    opt_property = "dip"
+    opt_property = "mw"
 
     # Read in monomers from input file
     # read_file = open('../input_files/1235MonomerList.txt', 'r')
@@ -580,7 +575,7 @@ def main():
         poly_property_list = find_poly_mw(population, poly_size, mw_list)
     elif opt_property == "dip":
         # calculate dipole moments for each polymer
-        print("population:", population)
+        # print("population:", population)
         poly_property_list = find_poly_dipole(population, poly_size, smiles_list)
     else:
         print("Error: opt_property not recognized. trace:main:initial pop properties")
@@ -590,24 +585,55 @@ def main():
     max_test = max(poly_property_list)
     avg_test = (max_test - min_test) / 2.0
 
-    # create new output read_file
-    #write_file = open("/ihome/ghutchison/dch45/Chem_GA_Project/src/ga_polymer_output.txt", "w+")
-    #write_file.write("min, max, avg, \n")
+    # create new output files
+    analysis_file = open('gens_analysis.txt', 'w+')
+    population_file = open('gens_population.txt', 'w+')
+    values_file = open('gens_values', 'w+')
+     
+    # write files headers
+    analysis_file.write('min, max, avg, spearman, \n')
+    population_file.write('polymer populations \n')
+    values_file.write('%s values \n' % (opt_property))
+    
+    #capture initial population data
+    analysis_file.write('%f, %f, %f, n/a, \n' % (min_test, max_test, avg_test))
+    
+    for polymer in population:
+        # capture monomer indexes and numerical sequence as strings for population file 
+        mono1 = str(polymer[1])
+        mono2 = str(polymer[2])
+        seq = polymer[0]
+        # create string of actual length sequence (e.g. hexamer when poly_size = 6)
+        triple_seq = seq + seq + seq
+        true_length_seq = ''.join(str(triple_seq[i]) for i in range(poly_size))
+        
+        population_file.write('%s_%s_%s, ' % (mono1, mono2, true_length_seq))
 
+    population_file.write('\n')
+    
+    for value in poly_property_list:
+        values_file.write('%f, ' % (value))
+    values_file.write('\n')
+
+    
+    
     # Loop
+    
+    n = int(pop_size*0.1)
+    if n < 8:
+        n = 8
+        
+    temp = 0
     #while (max_test < min_std):
-    for x in range(1):
-
+    #for x in range(10):
+        
     # check for convergence among top 10% (or top 8, whichever is larger) candidates between 5 generations
-
-    #n = int(pop_size*0.1)
-    #if n < 8:
-        #n = 8
-    #conv_counter = 0
-    #while conv_counter < 25:
+    conv_counter = 0
+    while conv_counter < 15:
+        temp += 1
 
         # created sorted monomer list so most frequent are first
-        #ordered_mono_idx1 = make_mono_indicies_list(mono_list)
+        ordered_mono_idx1 = make_mono_indicies_list(mono_list)
 
 
         # Selection - select heaviest (best) 50% of polymers as parents
@@ -629,45 +655,64 @@ def main():
         max_test = max(poly_property_list)
         avg_test = mean(poly_property_list)
 
+        '''
         population_string = ''
         for polymer in population:
             poly_string = construct_polymer_string(polymer, smiles_list, poly_size)
             population_string = population_string + poly_string + ", "
-
-        #write_file.write("{}, {}, {}, {} \n".format(min_test, max_test, avg_test, population_string))
-        print(min_test, max_test, avg_test)
-
         '''
+    
         # created sorted monomer list so most frequent are first
         ordered_mono_idx2 = make_mono_indicies_list(mono_list)
 
         # calculate Spearman correlation coefficient
-
         spear = stats.spearmanr(ordered_mono_idx1[:n], ordered_mono_idx2[:n])[0]
-        '''
+        #print(ordered_mono_idx1[:n])
+        #print(ordered_mono_idx2[:n])
+                        
+        # capture monomer indexes and numerical sequence as strings for population file 
+        analysis_file.write('%f, %f, %f, %f, \n' % (min_test, max_test, avg_test, spear))
+    
+        for polymer in population:
+            # capture monomer indexes and numerical sequence as strings for population file 
+            mono1 = str(polymer[1])
+            mono2 = str(polymer[2])
+            seq = polymer[0]
+            # create string of actual length sequence (e.g. hexamer when poly_size = 6)
+            triple_seq = seq + seq + seq
+            true_length_seq = ''.join(str(triple_seq[i]) for i in range(poly_size))
+
+            population_file.write('%s_%s_%s, ' % (mono1, mono2, true_length_seq))      
+        
+        population_file.write('\n')
+
+        for value in poly_property_list:
+            values_file.write('%f, ' % (value))
+            
+        values_file.write('\n')
+        
+        print(temp, max_test)        
+        print("spearman:", spear)
+        
         #print(ordered_mono_idx1[:10])
         #print(ordered_mono_idx2[:10])
         #print(spear)
 
 
         # keep track of number of successive generations meeting Spearman criterion
-        '''
+        
         if spear > 0.998:
             conv_counter += 1
         else:
             conv_counter = 0
-        '''
-
-        # print SMILES string of max polymer
-        #index = poly_property_list.index(max_test)
-        #print(construct_polymer_string(population[index], smiles_list, poly_size))
-
-        #print(min_test)
+        
 
 
-    #write_file.close()
-    print('End population', population)
-    print(poly_property_list)
+    # close all output files
+    analysis_file.close()
+    population_file.close()
+    values_file.close()
+    
 
     '''
     #Print out SMILES strings meeting MW criteria
