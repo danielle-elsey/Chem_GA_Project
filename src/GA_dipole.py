@@ -186,10 +186,10 @@ def run_geo_opt(i, polymer, smiles_list, poly_size):
     save_file = subprocess.call('(cp xtbopt.xyz opt/%s_%s_%s_opt.xyz)' % (mono1, mono2, true_length_seq), shell=True)
     del_restart = subprocess.call('(rm -f *restart)', shell=True)
 
-def find_poly_dipole(population, poly_size, smiles_list):
+def find_elec_prop(population, poly_size, smiles_list):
     '''
     Calculates dipole of polymers
-    TODO: add functionality to use polarizability calculations
+    TODO: add dipole tensor functionality
 
     Parameters
     ---------
@@ -202,8 +202,8 @@ def find_poly_dipole(population, poly_size, smiles_list):
 
     Returns
     -------
-    poly_dipole_list: list
-        list of polymer dipoles
+    electronic_prop_lists: list
+        nested list of [list of polymer dipoles, list of polymer polarizabilities]
     '''
 
     poly_polar_list = []
@@ -227,29 +227,27 @@ def find_poly_dipole(population, poly_size, smiles_list):
         for line in read_output:
             # create list of tokens in line
             tokens = line.split()
-
-            if line.startswith(" Mol. α(0)"):
-                temp_polar = float(tokens[4])
-                poly_polar_list.append(temp_polar)
-            '''
-            elif line.startswith("   full:"):
-                try:
-                    # dipole tensor - STILL A LIST OF STRINGS (not floats)
-                    # TODO: add tensor functionality later
-                    dipole_line = tokens
-                    temp_dipole = float(tokens[4])
-                    poly_dipole_list.append(temp_dipole)
-                else:
-                    poly_dipole_list.append(-10)
-                # break inner for loop to avoid overwriting with other lines starting with "full"
-                break
-             '''
-
+            try:
+                if line.startswith(" Mol. α(0)"):
+                    temp_polar = float(tokens[4])
+                    poly_polar_list.append(temp_polar)
+                elif line.startswith("   full:"):
+                    try:
+                        # dipole tensor - STILL A LIST OF STRINGS (not floats)
+                        # TODO: add tensor functionality later
+                        dipole_line = tokens
+                        temp_dipole = float(tokens[4])
+                        poly_dipole_list.append(temp_dipole)
+                    except:
+                        poly_dipole_list.append(-10)
+                    # break inner for loop to avoid overwriting with other lines starting with "full"
+                    break
+            except:
+                print("output file parsing error")
         read_output.close()
 
-    # print("calculated dipoles:", poly_dipole_list)
-    # print("calculated polarizabilities:", poly_polar_list)
-    return poly_dipole_list
+    electronic_prop_lists = [poly_dipole_list, poly_polar_list]
+    return electronic_prop_lists
 
 def make_pop_readable(population, sequence_list, smiles_list):
     '''
@@ -373,7 +371,7 @@ def mutate(polymer, sequence_list, smiles_list, mono_list):
     '''
 
     # determine whether to mutate
-    mut_rate = 1
+    mut_rate = 0.4
     rand = random.randint(1,10)
 
     if rand <= (mut_rate*10):
@@ -390,12 +388,39 @@ def mutate(polymer, sequence_list, smiles_list, mono_list):
     # or replace specific monomer
     else:
         new_mono = random.randint(0, len(smiles_list) - 1)
+        #new_mono = weighted_random_pick(mono_list)
         polymer[point] = new_mono
         # increase frequency count for monomer in mono_list
         mono_list[new_mono][1] += 1
 
 
     return polymer
+
+def weighted_random_pick(mono_list):
+
+    ordered_mono_list = deepcopy(mono_list)
+
+    # sort based on frequencies, put in ASCENDING order (LOWEST first)
+    ordered_mono_list = sorted(ordered_mono_list, key = lambda monomer: monomer[1])
+
+    # calculate sum of all weights [frequencies]
+    sum = 0
+    for idx in ordered_mono_list:
+        freq = idx[1]
+        sum += freq
+
+    # generate random number from 0 to sum, lower endpoint included
+    rand_num = random.randint(0, sum-1)
+
+    # loop over list of sorted weights, subtract weights from random number until random number is less than next weight
+    for idx in ordered_mono_list:
+        mono_idx = idx[0]
+        freq = idx[1]
+        if rand_num < freq:
+            return mono_idx
+        else:
+            rand_num -= freq
+
 
 def crossover_mutate(parent_list, pop_size, num_type_mono, sequence_list, smiles_list, mono_list):
     '''
@@ -627,10 +652,6 @@ def main():
     # number of monomers in imported monomer list
     mono_list_size = 1234
 
-
-    #true mw max for 1235MonomerList.txt w pop_size = 10 poly_size = 5
-    min_std = 3434
-
     # property of interest (options: molecular weight 'mw', dipole moment 'dip')
     opt_property = "mw"
 
@@ -687,19 +708,20 @@ def main():
             counter += 1
 
     # find initial population properties
-    if opt_property == "mw":
+    if opt_property == 'mw':
         # calculate MW for each monomer
         mw_list = []
         for monomer in smiles_list:
             temp_mono = pybel.readstring("smi", monomer).molwt
             mw_list.append(temp_mono)
-
         # Calculate polymer molecular weights
         poly_property_list = find_poly_mw(population, poly_size, mw_list)
-    elif opt_property == "dip":
+    elif opt_property == 'dip':
         # calculate dipole moments for each polymer
-        # print("population:", population)
-        poly_property_list = find_poly_dipole(population, poly_size, smiles_list)
+        poly_property_list = find_elec_prop(population, poly_size, smiles_list)[0]
+    elif opt_property == 'pol':
+        # calculate polarizabilities for each polymer
+        poly_property_list = find_elec_prop(population, poly_size, smiles_list)[1]
     else:
         print("Error: opt_property not recognized. trace:main:initial pop properties")
 
@@ -743,39 +765,18 @@ def main():
     # check for convergence among top 30% (or top 8, whichever is larger) candidates between 5 generations
     perc = 0.3
     n = int(mono_list_size*perc)
-    print("n=", n)
-    #n = int(1234*perc)
-    #if n < 8:
-        #n = 8
-
-    method_file = open('spear_method_test.txt', 'a')
-    #method_file.write('pop_size  %s\npoly_size   %s\nnum_type_mono   %s\nperc    %f\n' % (pop_size, poly_size, num_type_mono, perc))
 
     # initialize generation counter
     gen_counter = 0
 
-    # initialize convergence counters for each of 3 speaman methods
+    # initialize convergence counter
     spear_counter = 0
-    lam_counter = 0
-    three_counter = 0
 
-    # initialize trips to stop printing after convergence
-    spear_trip = 0
-    lam_trip = 0
-    three_trip = 0
-
-    #while spear_counter < 10:
-    for x in range(300):
+    while spear_counter < 10:
         gen_counter += 1
 
         # create sorted monomer list with most freq first
         gen1 = make_mono_indicies_list(mono_list)
-
-        # make file to test Ilana's spearman method
-        spear_file = open('spear_input.txt', 'w')
-        spear_file.write('Run\tSMILES\tCount\n')
-        for x in range(len(mono_list)):
-            spear_file.write('%i\t%s\t%i\n' % (gen_counter-1, str(mono_list[x][0]), mono_list[x][1]))
 
         # Selection - select heaviest (best) 50% of polymers as parents
         population = parent_select(opt_property, population, poly_property_list)
@@ -787,7 +788,9 @@ def main():
         if opt_property == "mw":
             poly_property_list = find_poly_mw(population, poly_size, mw_list)
         elif opt_property == "dip":
-            poly_property_list = find_poly_dipole(population, poly_size, smiles_list)
+            poly_property_list = find_elec_prop(population, poly_size, smiles_list)[0]
+        elif opt_property == 'pol':
+            poly_property_list = find_elec_prop(population, poly_size, smiles_list)[1]
         else:
             print("Error: opt_property not recognized. trace:main:loop pop properties")
 
@@ -801,15 +804,6 @@ def main():
 
         # calculate monomer idx method Spearman correlation coefficient
         spear = stats.spearmanr(gen1[:n], gen2[:n])[0]
-
-        # make file and calculate Ilana's method Spearman correlation coefficient
-        for x in range(len(mono_list)):
-            spear_file.write('%i\t%s\t%i\n' % (gen_counter, str(mono_list[x][0]), mono_list[x][1]))
-        lamarck_spear = analysis('spear_input.txt', 1-perc)
-
-        # make second rank list for method 3
-        spearman_ranks = get_spearman_ranks(mono_list, gen1)
-        three_spear = stats.spearmanr(spearman_ranks[0][:n], spearman_ranks[1][:n])[0]
 
         # capture monomer indexes and numerical sequence as strings for population file
         analysis_file.write('%f, %f, %f, %f, \n' % (min_test, max_test, avg_test, spear))
@@ -839,80 +833,14 @@ def main():
         else:
             spear_counter = 0
 
-        if lamarck_spear > 0.92:
-            lam_counter += 1
-        else:
-            lam_counter = 0
 
-
-        if three_spear > 0.92:
-            three_counter += 1
-        else:
-            three_counter = 0
-
-        # check for convergence
-        if spear_counter == 10 and spear_trip == 0:
-            spear_gen = gen_counter
-            spear_max = max_test
-            spear_coeff = spear
-
-            print('method 1 convergence reached')
-            print('generation:', gen_counter)
-            print('top values:', poly_property_list[:4])
-            #print(population[:4])
-            print('spearman coeff:', spear)
-            print('\n')
-            spear_trip = 1
-
-        if lam_counter == 10 and lam_trip == 0:
-            lam_gen = gen_counter
-            lam_max = max_test
-            lam_coeff = lamarck_spear
-
-            print('method 2 convergence reached')
-            print('generation:', gen_counter)
-            print('top values:', poly_property_list[:4])
-            #print(population[:4])
-            print('spearman coeff:', lamarck_spear)
-            print('\n')
-            lam_trip = 1
-
-        if three_counter == 10 and three_trip == 0:
-            three_gen = gen_counter
-            three_max = max_test
-            three_coeff = three_spear
-
-            print('method 3 convergence reached')
-            print('generation:', gen_counter)
-            print('top values:', poly_property_list[:4])
-            #print(population[:4])
-            print('spearman coeff:', three_spear)
-            print('\n')
-            three_trip = 1
-
-    #method_file.write('convergence generation\t\t\ttop MW\t\t\tspearman coeff\t\t')
-    method_file.write('%s\t%s\t%s\t\t%f\t%f\t%f\t\t%f\t%f\t%f\n' % (spear_gen, lam_gen, three_gen, spear_max, lam_max, three_max, spear_coeff, lam_coeff, three_coeff))
-
-
+    print(max_test, gen_counter)
 
     # close all output files
     analysis_file.close()
     population_file.close()
     values_file.close()
-    method_file.close()
 
-    '''
-    # print("LAMARCK SPEAR CONVERGED\n generation: %i\n propery value: %i" % (gen_counter, max_test))
-    #for x in range(len(converge_generations_lam)):
-        #print(converge_generations_lam[x])
-
-
-    #Print out SMILES strings meeting MW criteria
-    polymer_smiles_list = []
-    for polymer in population:
-        polymer_smiles_list.append(construct_polymer_string(polymer, smiles_list, poly_size))
-    print(polymer_smiles_list)
-    '''
 
 if __name__ == '__main__':
     main()
