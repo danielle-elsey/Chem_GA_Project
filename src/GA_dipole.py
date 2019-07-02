@@ -17,9 +17,62 @@ from statistics import mean
 from itertools import product
 from copy import deepcopy
 import shlex
+import pandas as pd
 
 ob = pybel.ob
 
+def analysis(data_file, perc):
+
+    df = pd.read_csv(data_file, sep='\t', header=0)
+
+    # Makes a pivot table with SMILES as the rows and columns of different row numbers
+    pt = pd.pivot_table(df, index=["SMILES"], values=["Run"], columns=["Run"], fill_value=0)
+    # Add across each row to get the total number of monomers and sort from largest to smallest
+    pt_sum = pt.sum(1).sort_values(ascending=False)
+
+    # Takes the values that are larger than the quartile being analyzed
+    a = pt_sum[pt_sum > pt_sum.quantile(perc)]
+
+    # Identifies the number of monomers within that top percentage which will be used in the analysis
+    num_monomers = len(a.index)
+
+    # Generates smaller pivot table which includes only the top monomers
+    pt_subset = pt.loc[a.index.values]
+
+    # Pairwise spearman correlation of all runs
+    corr = pt_subset.corr(method='spearman')
+
+    # Removes duplicate Spearman correlations and substituting with nan
+    c = corr.copy()
+    c.values[np.tril_indices_from(c)] = np.nan
+
+    s = c.unstack().mean()
+
+    # Generate ndarray of values of the Spearman correlations
+    s1 = s.values
+
+    # Removes nan values leaving just the desired  Spearman correlations
+    sv = s1[~np.isnan(s1)]
+
+    # Converts numpy array to list of values which can then be saved individually
+    sv_values = list(sv)
+
+    # Saves the values in a test file in the format percentage, Generations, Spearman Value which
+    # can then be plotted. This file will just be appended to which allows many data sets to be combined into
+    # one long list with all data which can then be plotted, analyzed, etc.
+
+    for i in sv_values:
+        #generations = int(sys.argv[3])
+        generations = 2
+
+        #monomers = int(sys.argv[4])
+        monomers = 1234
+
+        #with open(sys.argv[2], "a") as output_file:
+        with open('spear_output.txt', 'a') as output_file:
+            output_file.write("%i\t%i\t%s\t%f\n" % (monomers, generations, perc, i))
+
+    return sv_values[0]
 
 def make3D(mol):
     '''
@@ -32,7 +85,6 @@ def make3D(mol):
     '''
     pybel._builder.Build(mol.OBMol)
     mol.addh()
-
 
 def find_sequences(num_type_mono):
     '''
@@ -56,7 +108,6 @@ def find_sequences(num_type_mono):
     numer_seqs = list(product(range(num_type_mono), repeat=seq_len))
 
     return numer_seqs
-
 
 def find_poly_mw(population, poly_size, mw_list):
     '''
@@ -113,13 +164,13 @@ def run_geo_opt(i, polymer, smiles_list, poly_size):
     -------
     N/A
     '''
-    
+
     poly_smiles = construct_polymer_string(polymer, smiles_list, poly_size)
 
     # make polymer string into openbabel object
     mol = pybel.readstring('smi', poly_smiles)
     make3D(mol)
-    
+
     # capture monomer indexes and numerical sequence as strings for file naming
     mono1 = str(polymer[1])
     mono2 = str(polymer[2])
@@ -130,11 +181,10 @@ def run_geo_opt(i, polymer, smiles_list, poly_size):
 
     # write polymer .xyz file to containing folder
     mol.write('xyz', 'input/%s_%s_%s.xyz' % (mono1, mono2, true_length_seq), overwrite=True)
-    
+
     xtb = subprocess.call('(/ihome/ghutchison/geoffh/xtb/xtb input/%s_%s_%s.xyz --opt >output/%s_%s_%s.out)' % (mono1, mono2, true_length_seq, mono1, mono2, true_length_seq), shell=True)
     save_file = subprocess.call('(cp xtbopt.xyz opt/%s_%s_%s_opt.xyz)' % (mono1, mono2, true_length_seq), shell=True)
     del_restart = subprocess.call('(rm -f *restart)', shell=True)
-
 
 def find_poly_dipole(population, poly_size, smiles_list):
     '''
@@ -162,7 +212,7 @@ def find_poly_dipole(population, poly_size, smiles_list):
     # TODO: get rid of enumerate after implementing new naming system
     for i, polymer in enumerate(population):
         run_geo_opt(i, polymer, smiles_list, poly_size)
-        
+
         # capture monomer indexes and numerical sequence as strings for file naming
         mono1 = str(polymer[1])
         mono2 = str(polymer[2])
@@ -170,7 +220,7 @@ def find_poly_dipole(population, poly_size, smiles_list):
         # create string of actual length sequence (e.g. hexamer when poly_size = 6)
         triple_seq = seq + seq + seq
         true_length_seq = ''.join(str(triple_seq[i]) for i in range(poly_size))
-        
+
         read_output = open('output/%s_%s_%s.out' % (mono1, mono2, true_length_seq), 'r')
 
         # parse output file for static polarizability and dipole moment
@@ -200,7 +250,6 @@ def find_poly_dipole(population, poly_size, smiles_list):
     # print("calculated dipoles:", poly_dipole_list)
     # print("calculated polarizabilities:", poly_polar_list)
     return poly_dipole_list
-
 
 def make_pop_readable(population, sequence_list, smiles_list):
     '''
@@ -244,7 +293,6 @@ def make_pop_readable(population, sequence_list, smiles_list):
 
     return readable_poly
 
-
 def fitness_fn(opt_property, population, poly_property_list):
     '''
     Fitness function ranking current population members
@@ -277,7 +325,6 @@ def fitness_fn(opt_property, population, poly_property_list):
         print("Error: opt_property not recognized. trace:fitness_fn")
     return ranked_indicies
 
-
 def parent_select(opt_property, population, poly_property_list):
     '''
     Return top half of the population
@@ -306,7 +353,6 @@ def parent_select(opt_property, population, poly_property_list):
 
     return parent_list
 
-
 def mutate(polymer, sequence_list, smiles_list, mono_list):
     '''
     Mutates polymer
@@ -327,7 +373,7 @@ def mutate(polymer, sequence_list, smiles_list, mono_list):
     '''
 
     # determine whether to mutate
-    mut_rate = 0.6
+    mut_rate = 1
     rand = random.randint(1,10)
 
     if rand <= (mut_rate*10):
@@ -350,7 +396,6 @@ def mutate(polymer, sequence_list, smiles_list, mono_list):
 
 
     return polymer
-
 
 def crossover_mutate(parent_list, pop_size, num_type_mono, sequence_list, smiles_list, mono_list):
     '''
@@ -425,9 +470,86 @@ def crossover_mutate(parent_list, pop_size, num_type_mono, sequence_list, smiles
 
     return new_pop
 
+def get_mono_ranks(mono_list):
+    '''
+    Make list of ranks of monomers by usage
+
+    Parameters
+    ---------
+    mono_list: list (specific format)
+        [[monomer index, frequency]]
+
+    Returns
+    -------
+    mono_ranks: list
+        list of monomer ranks (by usage) in order of monomer SMILES list indicies
+    '''
+
+    ordered_mono_list = deepcopy(mono_list)
+
+    # sort based on frequencies, put in descending order (highest first)
+    ordered_mono_list = sorted(ordered_mono_list, key = lambda monomer: monomer[1], reverse = True)
+
+    # add ranks(sorted order number) to list of mono indicies and freqs(sorted order number)
+    for x in range(len(ordered_mono_list)):
+        ordered_mono_list[x].append(x)
+
+    # reorder list by monomer index (lowest first)
+    ordered_mono_list = sorted(ordered_mono_list, key = lambda monomer: monomer[0])
+
+    #print("ordered_mono_list", ordered_mono_list)
+
+    # extract list of ranks in order of monomer indicies
+    mono_ranks = []
+    for x in range(len(ordered_mono_list)):
+        mono_ranks.append(ordered_mono_list[x][2])
+
+    #print("mono ranks", mono_ranks)
+    return mono_ranks
+
+def get_spearman_ranks(mono_list, init_mono_indicies):
+    '''
+    Create nested list of numerical rank with monomer index (rank 0 = most freq momomer)
+    Order by frequency (most freq monomer index first)
+    Rank are initial ranks in new order
+
+    Parameters
+    ---------
+    mono_list: list (specific format)
+        [[monomer index, frequency]]
+
+    Returns
+    -------
+    mono_spear_ranks: list (specific format)
+        [[initial ranks], [final ranks]]
+    '''
+
+    init_mono_ranks = list(range(len(mono_list)))
+
+    # make list of mono indicies in order of freq, highest first
+    final_mono_indicies = make_mono_indicies_list(mono_list)
+
+    # make list of monomer indicies and their ranks (most freq first with lowest rank)
+    final_mono_ranks = []
+    for x in range(len(final_mono_indicies)):
+        mono_idx = final_mono_indicies[x]
+        rank = init_mono_indicies.index(mono_idx)
+        final_mono_ranks.append(rank)
+
+    mono_spear_ranks = [init_mono_ranks, final_mono_ranks]
+
+    '''
+    print("initial ranks \n:", init_mono_ranks)
+    print(init_mono_indicies)
+    print("final ranks \n:", final_mono_ranks)
+    print(final_mono_indicies)
+    '''
+
+    return mono_spear_ranks
+
 def make_mono_indicies_list(mono_list):
     '''
-    Make list of monomer indicies ordered by frequency (highest first)
+    Make list of all monomer indicies ordered by frequency (highest first)
 
     Parameters
     ---------
@@ -449,11 +571,10 @@ def make_mono_indicies_list(mono_list):
     mono_indicies = []
     for x in range(len(ordered_mono_list)):
         mono_indicies.append(ordered_mono_list[x][0])
-        
+
     #print(mono_indicies)
 
     return mono_indicies
-
 
 def construct_polymer_string(polymer, smiles_list, poly_size):
     '''
@@ -503,6 +624,8 @@ def main():
     poly_size = 6
     # number of types of monomers in each polymer
     num_type_mono = 2
+    # number of monomers in imported monomer list
+    mono_list_size = 1234
 
 
     #true mw max for 1235MonomerList.txt w pop_size = 10 poly_size = 5
@@ -512,8 +635,8 @@ def main():
     opt_property = "mw"
 
     # Read in monomers from input file
-    # read_file = open('../input_files/1235MonomerList.txt', 'r')
-    read_file = open('/ihome/ghutchison/dch45/Chem_GA_Project/input_files/1235MonomerList.txt', 'r')
+    read_file = open('../input_files/1235MonomerList.txt', 'r')
+    # read_file = open('/ihome/ghutchison/dch45/Chem_GA_Project/input_files/1235MonomerList.txt', 'r')
 
 
     # create list of monomer SMILES strings
@@ -589,52 +712,70 @@ def main():
     analysis_file = open('gens_analysis.txt', 'w+')
     population_file = open('gens_population.txt', 'w+')
     values_file = open('gens_values', 'w+')
-     
+
     # write files headers
     analysis_file.write('min, max, avg, spearman, \n')
     population_file.write('polymer populations \n')
     values_file.write('%s values \n' % (opt_property))
-    
+
     #capture initial population data
     analysis_file.write('%f, %f, %f, n/a, \n' % (min_test, max_test, avg_test))
-    
+
     for polymer in population:
-        # capture monomer indexes and numerical sequence as strings for population file 
+        # capture monomer indexes and numerical sequence as strings for population file
         mono1 = str(polymer[1])
         mono2 = str(polymer[2])
         seq = polymer[0]
         # create string of actual length sequence (e.g. hexamer when poly_size = 6)
         triple_seq = seq + seq + seq
         true_length_seq = ''.join(str(triple_seq[i]) for i in range(poly_size))
-        
+
         population_file.write('%s_%s_%s, ' % (mono1, mono2, true_length_seq))
 
     population_file.write('\n')
-    
+
     for value in poly_property_list:
         values_file.write('%f, ' % (value))
     values_file.write('\n')
 
-    
-    
     # Loop
-    
-    n = int(pop_size*0.1)
-    if n < 8:
-        n = 8
-        
-    temp = 0
-    #while (max_test < min_std):
-    #for x in range(10):
-        
-    # check for convergence among top 10% (or top 8, whichever is larger) candidates between 5 generations
-    conv_counter = 0
-    while conv_counter < 15:
-        temp += 1
 
-        # created sorted monomer list so most frequent are first
-        ordered_mono_idx1 = make_mono_indicies_list(mono_list)
+    # check for convergence among top 30% (or top 8, whichever is larger) candidates between 5 generations
+    perc = 0.3
+    n = int(mono_list_size*perc)
+    print("n=", n)
+    #n = int(1234*perc)
+    #if n < 8:
+        #n = 8
 
+    method_file = open('spear_method_test.txt', 'a')
+    #method_file.write('pop_size  %s\npoly_size   %s\nnum_type_mono   %s\nperc    %f\n' % (pop_size, poly_size, num_type_mono, perc))
+
+    # initialize generation counter
+    gen_counter = 0
+
+    # initialize convergence counters for each of 3 speaman methods
+    spear_counter = 0
+    lam_counter = 0
+    three_counter = 0
+
+    # initialize trips to stop printing after convergence
+    spear_trip = 0
+    lam_trip = 0
+    three_trip = 0
+
+    #while spear_counter < 10:
+    for x in range(300):
+        gen_counter += 1
+
+        # create sorted monomer list with most freq first
+        gen1 = make_mono_indicies_list(mono_list)
+
+        # make file to test Ilana's spearman method
+        spear_file = open('spear_input.txt', 'w')
+        spear_file.write('Run\tSMILES\tCount\n')
+        for x in range(len(mono_list)):
+            spear_file.write('%i\t%s\t%i\n' % (gen_counter-1, str(mono_list[x][0]), mono_list[x][1]))
 
         # Selection - select heaviest (best) 50% of polymers as parents
         population = parent_select(opt_property, population, poly_property_list)
@@ -642,7 +783,7 @@ def main():
         # Crossover & Mutation - create children to repopulate bottom 50% of polymers in population
         population = crossover_mutate(population, pop_size, num_type_mono, sequence_list, smiles_list, mono_list)
 
-
+        # calculate desired polymer property
         if opt_property == "mw":
             poly_property_list = find_poly_mw(population, poly_size, mw_list)
         elif opt_property == "dip":
@@ -650,31 +791,31 @@ def main():
         else:
             print("Error: opt_property not recognized. trace:main:loop pop properties")
 
-        # find minimum polymer weight
+        # record representative generation properties
         min_test = min(poly_property_list)
         max_test = max(poly_property_list)
         avg_test = mean(poly_property_list)
 
-        '''
-        population_string = ''
-        for polymer in population:
-            poly_string = construct_polymer_string(polymer, smiles_list, poly_size)
-            population_string = population_string + poly_string + ", "
-        '''
-    
-        # created sorted monomer list so most frequent are first
-        ordered_mono_idx2 = make_mono_indicies_list(mono_list)
+        # create sorted monomer list with most freq first
+        gen2 = make_mono_indicies_list(mono_list)
 
-        # calculate Spearman correlation coefficient
-        spear = stats.spearmanr(ordered_mono_idx1[:n], ordered_mono_idx2[:n])[0]
-        #print(ordered_mono_idx1[:n])
-        #print(ordered_mono_idx2[:n])
-                        
-        # capture monomer indexes and numerical sequence as strings for population file 
+        # calculate monomer idx method Spearman correlation coefficient
+        spear = stats.spearmanr(gen1[:n], gen2[:n])[0]
+
+        # make file and calculate Ilana's method Spearman correlation coefficient
+        for x in range(len(mono_list)):
+            spear_file.write('%i\t%s\t%i\n' % (gen_counter, str(mono_list[x][0]), mono_list[x][1]))
+        lamarck_spear = analysis('spear_input.txt', 1-perc)
+
+        # make second rank list for method 3
+        spearman_ranks = get_spearman_ranks(mono_list, gen1)
+        three_spear = stats.spearmanr(spearman_ranks[0][:n], spearman_ranks[1][:n])[0]
+
+        # capture monomer indexes and numerical sequence as strings for population file
         analysis_file.write('%f, %f, %f, %f, \n' % (min_test, max_test, avg_test, spear))
-    
+
         for polymer in population:
-            # capture monomer indexes and numerical sequence as strings for population file 
+            # capture monomer indexes and numerical sequence as strings for population file
             mono1 = str(polymer[1])
             mono2 = str(polymer[2])
             seq = polymer[0]
@@ -682,39 +823,90 @@ def main():
             triple_seq = seq + seq + seq
             true_length_seq = ''.join(str(triple_seq[i]) for i in range(poly_size))
 
-            population_file.write('%s_%s_%s, ' % (mono1, mono2, true_length_seq))      
-        
+            population_file.write('%s_%s_%s, ' % (mono1, mono2, true_length_seq))
+
         population_file.write('\n')
 
         for value in poly_property_list:
             values_file.write('%f, ' % (value))
-            
+
         values_file.write('\n')
-        
-        print(temp, max_test)        
-        print("spearman:", spear)
-        
-        #print(ordered_mono_idx1[:10])
-        #print(ordered_mono_idx2[:10])
-        #print(spear)
 
 
         # keep track of number of successive generations meeting Spearman criterion
-        
-        if spear > 0.998:
-            conv_counter += 1
+        if spear > 0.92:
+            spear_counter += 1
         else:
-            conv_counter = 0
-        
+            spear_counter = 0
+
+        if lamarck_spear > 0.92:
+            lam_counter += 1
+        else:
+            lam_counter = 0
+
+
+        if three_spear > 0.92:
+            three_counter += 1
+        else:
+            three_counter = 0
+
+        # check for convergence
+        if spear_counter == 10 and spear_trip == 0:
+            spear_gen = gen_counter
+            spear_max = max_test
+            spear_coeff = spear
+
+            print('method 1 convergence reached')
+            print('generation:', gen_counter)
+            print('top values:', poly_property_list[:4])
+            #print(population[:4])
+            print('spearman coeff:', spear)
+            print('\n')
+            spear_trip = 1
+
+        if lam_counter == 10 and lam_trip == 0:
+            lam_gen = gen_counter
+            lam_max = max_test
+            lam_coeff = lamarck_spear
+
+            print('method 2 convergence reached')
+            print('generation:', gen_counter)
+            print('top values:', poly_property_list[:4])
+            #print(population[:4])
+            print('spearman coeff:', lamarck_spear)
+            print('\n')
+            lam_trip = 1
+
+        if three_counter == 10 and three_trip == 0:
+            three_gen = gen_counter
+            three_max = max_test
+            three_coeff = three_spear
+
+            print('method 3 convergence reached')
+            print('generation:', gen_counter)
+            print('top values:', poly_property_list[:4])
+            #print(population[:4])
+            print('spearman coeff:', three_spear)
+            print('\n')
+            three_trip = 1
+
+    #method_file.write('convergence generation\t\t\ttop MW\t\t\tspearman coeff\t\t')
+    method_file.write('%s\t%s\t%s\t\t%f\t%f\t%f\t\t%f\t%f\t%f\n' % (spear_gen, lam_gen, three_gen, spear_max, lam_max, three_max, spear_coeff, lam_coeff, three_coeff))
+
 
 
     # close all output files
     analysis_file.close()
     population_file.close()
     values_file.close()
-    
+    method_file.close()
 
     '''
+    # print("LAMARCK SPEAR CONVERGED\n generation: %i\n propery value: %i" % (gen_counter, max_test))
+    #for x in range(len(converge_generations_lam)):
+        #print(converge_generations_lam[x])
+
+
     #Print out SMILES strings meeting MW criteria
     polymer_smiles_list = []
     for polymer in population:
