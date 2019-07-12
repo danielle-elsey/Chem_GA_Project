@@ -21,59 +21,6 @@ import pandas as pd
 
 ob = pybel.ob
 
-def analysis(data_file, perc):
-
-    df = pd.read_csv(data_file, sep='\t', header=0)
-
-    # Makes a pivot table with SMILES as the rows and columns of different row numbers
-    pt = pd.pivot_table(df, index=["SMILES"], values=["Run"], columns=["Run"], fill_value=0)
-    # Add across each row to get the total number of monomers and sort from largest to smallest
-    pt_sum = pt.sum(1).sort_values(ascending=False)
-
-    # Takes the values that are larger than the quartile being analyzed
-    a = pt_sum[pt_sum > pt_sum.quantile(perc)]
-
-    # Identifies the number of monomers within that top percentage which will be used in the analysis
-    num_monomers = len(a.index)
-
-    # Generates smaller pivot table which includes only the top monomers
-    pt_subset = pt.loc[a.index.values]
-
-    # Pairwise spearman correlation of all runs
-    corr = pt_subset.corr(method='spearman')
-
-    # Removes duplicate Spearman correlations and substituting with nan
-    c = corr.copy()
-    c.values[np.tril_indices_from(c)] = np.nan
-
-    s = c.unstack().mean()
-
-    # Generate ndarray of values of the Spearman correlations
-    s1 = s.values
-
-    # Removes nan values leaving just the desired  Spearman correlations
-    sv = s1[~np.isnan(s1)]
-
-    # Converts numpy array to list of values which can then be saved individually
-    sv_values = list(sv)
-
-    # Saves the values in a test file in the format percentage, Generations, Spearman Value which
-    # can then be plotted. This file will just be appended to which allows many data sets to be combined into
-    # one long list with all data which can then be plotted, analyzed, etc.
-
-    for i in sv_values:
-        #generations = int(sys.argv[3])
-        generations = 2
-
-        #monomers = int(sys.argv[4])
-        monomers = 1234
-
-        #with open(sys.argv[2], "a") as output_file:
-        with open('spear_output.txt', 'a') as output_file:
-            output_file.write("%i\t%i\t%s\t%f\n" % (monomers, generations, perc, i))
-
-    return sv_values[0]
-
 def make3D(mol):
     '''
     Makes the mol object from SMILES 3D
@@ -83,17 +30,18 @@ def make3D(mol):
     mol: object
         pybel molecule object
     '''
+    # make mol object 3D and add hydrogens
     pybel._builder.Build(mol.OBMol)
     mol.addh()
 
-def find_sequences(num_type_mono):
+def find_sequences(num_mono_species):
     '''
     Finds all possible sequences
 
     Parameters
     ---------
-    num_type_mono: int
-        number of types of monomers in each polymer
+    num_mono_species: int
+        number of monomer species in each polymer (e.g. copolymer = 2)
 
     Returns
     -------
@@ -101,15 +49,15 @@ def find_sequences(num_type_mono):
         all possible sequences as a numerical list
     '''
     # find length of each sequence
-    seq_len = num_type_mono**2
+    seq_len = num_mono_species**2
 
     # find all possible sequences as numerical lists [start index 0]
     # (use cartesian product of each type of monomer over sequence length)
-    numer_seqs = list(product(range(num_type_mono), repeat=seq_len))
+    numer_seqs = list(product(range(num_mono_species), repeat=seq_len))
 
     return numer_seqs
 
-def find_poly_mw(population, poly_size, mw_list):
+def find_poly_mw(population, poly_size, smiles_list):
     '''
     Calculates molecular weight of polymers
 
@@ -119,77 +67,95 @@ def find_poly_mw(population, poly_size, mw_list):
         list of polymers in population
     poly_size: int
         number of monomers per polymer
-    mw_list: list
-        list of molecular weights
+    smiles_list: list
+        list of all possible monomer SMILES
 
     Returns
     -------
     poly_mw_list: list
-        list of polymer molecular weights
+        list of molecular weights of polymers in population
     '''
     poly_mw_list = []
     for polymer in population:
-        temp_mw = 0
-        # counter for cycling over monomer sequence
-        cycle = 0
-        # loop over total monomers in each polymer
-        for i in range(poly_size):
-            # cycle over monomer sequence until total number of monomers is reached
-            seq_cycle_location = i - cycle * (len(polymer[0]))
-            seq_monomer_index = polymer[0][seq_cycle_location]
-            if seq_cycle_location == (len(polymer[0]) - 1):
-                cycle += 1
-            # find index in polymer of monomer index (from smiles_list) from given sequence value
-            monomer_index = polymer[seq_monomer_index + 1]
-            temp_mw += mw_list[monomer_index]
-        poly_mw_list.append(temp_mw)
+        # make polymer into SMILES string
+        poly_smiles = make_polymer_str(polymer, smiles_list, poly_size)
+        # make polymer string into pybel molecule object
+        mol = pybel.readstring('smi', poly_smiles)
+
+        # add mw of polymer to list
+        poly_mw = mol.molwt
+        poly_mw_list.append(poly_mw)
+
     return poly_mw_list
 
-def run_geo_opt(i, polymer, smiles_list, poly_size):
+def make_file_name(polymer, poly_size):
     '''
-    Runs geometry optimization calculation
+    Makes file name for a given polymer
 
     Parameters
     ---------
-    i: int
-        index of polymer
-    polymer: [(#,#,#,#), A, B]
-        ???
-    poly_size: int
-        number of monomers per polymer
-    smiles_list: list
-        list of monomer SMILES
+    polymer: list (specific format)
+        [(#,#,#,#), A, B]
 
     Returns
     -------
-    N/A
+    file_name: str
+        polymer file name (w/o extension) showing monomer indicies and full sequence
+        e.g. 100_200_101010 for a certain hexamer
     '''
-
-    poly_smiles = construct_polymer_string(polymer, smiles_list, poly_size)
-
-    # make polymer string into openbabel object
-    mol = pybel.readstring('smi', poly_smiles)
-    make3D(mol)
 
     # capture monomer indexes and numerical sequence as strings for file naming
     mono1 = str(polymer[1])
     mono2 = str(polymer[2])
     seq = polymer[0]
-    # create string of actual length sequence (e.g. hexamer when poly_size = 6)
+
+    # make string of actual length sequence (e.g. hexamer when poly_size = 6)
     triple_seq = seq + seq + seq
     true_length_seq = ''.join(str(triple_seq[i]) for i in range(poly_size))
 
-    # write polymer .xyz file to containing folder
-    mol.write('xyz', 'input/%s_%s_%s.xyz' % (mono1, mono2, true_length_seq), overwrite=True)
+    # make file name string
+    file_name = '%s_%s_%s' % (mono1, mono2, true_length_seq)
 
-    xtb = subprocess.call('(/ihome/ghutchison/geoffh/xtb/xtb input/%s_%s_%s.xyz --opt >output/%s_%s_%s.out)' % (mono1, mono2, true_length_seq, mono1, mono2, true_length_seq), shell=True)
-    save_file = subprocess.call('(cp xtbopt.xyz opt/%s_%s_%s_opt.xyz)' % (mono1, mono2, true_length_seq), shell=True)
+    return file_name
+
+def run_geo_opt(polymer, poly_size, smiles_list):
+    '''
+    Runs geometry optimization calculation on given polymer
+
+    Parameters
+    ---------
+    polymer: list (specific format)
+        [(#,#,#,#), A, B]
+    poly_size: int
+        number of monomers per polymer
+    smiles_list: list
+        list of all possible monomer SMILES
+
+    '''
+    # make polymer into SMILES string
+    poly_smiles = make_polymer_str(polymer, smiles_list, poly_size)
+
+    # make polymer string into pybel molecule object
+    mol = pybel.readstring('smi', poly_smiles)
+    make3D(mol)
+
+    # make file name string w/ convention monoIdx1_monoIdx2_fullNumerSequence
+    file_name = make_file_name(polymer, poly_size)
+
+    # write polymer .xyz file to containing folder
+    mol.write('xyz', 'input/%s.xyz' % (file_name), overwrite=True)
+
+    # run xTB geometry optimization
+    xtb = subprocess.call('(/ihome/ghutchison/geoffh/xtb/xtb input/%s.xyz --opt >output/%s.out)' % (file_name, file_name), shell=True)
+
+    save_opt_file = subprocess.call('(cp xtbopt.xyz opt/%s_opt.xyz)' % (file_name), shell=True)
     del_restart = subprocess.call('(rm -f *restart)', shell=True)
 
 def find_elec_prop(population, poly_size, smiles_list):
     '''
-    Calculates dipole of polymers
+    Calculates dipole moment and polarizability of each polymer in population
     TODO: add dipole tensor functionality
+    TODO: update parser to catch failures/errors in output file
 
     Parameters
     ---------
@@ -198,134 +164,89 @@ def find_elec_prop(population, poly_size, smiles_list):
     poly_size: int
         number of monomers per polymer
     smiles_list: list
-        list of monomer SMILES
+        list of all possible monomer SMILES
 
     Returns
     -------
-    electronic_prop_lists: list
-        nested list of [list of polymer dipoles, list of polymer polarizabilities]
+    elec_prop_lists: list
+        nested list of [list of polymer dipole moments, list of polymer polarizabilities]
     '''
 
     poly_polar_list = []
     poly_dipole_list = []
 
-    # TODO: get rid of enumerate after implementing new naming system
-    for i, polymer in enumerate(population):
-        run_geo_opt(i, polymer, smiles_list, poly_size)
+    for polymer in population:
+        # run xTB geometry optimization calculation on polymer
+        run_geo_opt(polymer, poly_size, smiles_list)
 
-        # capture monomer indexes and numerical sequence as strings for file naming
-        mono1 = str(polymer[1])
-        mono2 = str(polymer[2])
-        seq = polymer[0]
-        # create string of actual length sequence (e.g. hexamer when poly_size = 6)
-        triple_seq = seq + seq + seq
-        true_length_seq = ''.join(str(triple_seq[i]) for i in range(poly_size))
+        # make file name string w/ convention monoIdx1_monoIdx2_fullNumerSequence
+        file_name = make_file_name(polymer, poly_size)
 
-        read_output = open('output/%s_%s_%s.out' % (mono1, mono2, true_length_seq), 'r')
+        # check for xTB failures
+        if 'FAILED' in open('output/%s.out' % (file_name)):
+            # move output file to 'failed' directory
+            move_fail_file = subprocess.call('(mv output/%s.out failed/%s.out)' % (file_name, file_name), shell=True)
 
-        # parse output file for static polarizability and dipole moment
-        for line in read_output:
-            # create list of tokens in line
-            tokens = line.split()
-            try:
+            # note failure by filling property lists with dummy values
+            poly_polar_list.append(-10)
+            poly_dipole_list.append(-10)
+
+        # if xTB successful, parse output file for static polarizability and dipole moment
+        else:
+            read_output = open('output/%s.out' % (file_name), 'r')
+            for line in read_output:
+                # create list of tokens in line
+                tokens = line.split()
+
                 if line.startswith(" Mol. α(0)"):
                     temp_polar = float(tokens[4])
                     poly_polar_list.append(temp_polar)
                 elif line.startswith("   full:"):
-                    try:
-                        # dipole tensor - STILL A LIST OF STRINGS (not floats)
-                        # TODO: add tensor functionality later
-                        dipole_line = tokens
-                        temp_dipole = float(tokens[4])
-                        poly_dipole_list.append(temp_dipole)
-                    except:
-                        poly_dipole_list.append(-10)
+                    # dipole tensor - STILL A LIST OF STRINGS (not floats)
+                    # TODO: add tensor functionality later
+                    dipole_line = tokens
+                    temp_dipole = float(tokens[4])
+                    poly_dipole_list.append(temp_dipole)
                     # break inner for loop to avoid overwriting with other lines starting with "full"
                     break
-            except:
-                print("output file parsing error")
-        read_output.close()
+            read_output.close()
 
-    electronic_prop_lists = [poly_dipole_list, poly_polar_list]
-    return electronic_prop_lists
+    # make nested list of dipole moment and polarizability lists
+    elec_prop_lists = [poly_dipole_list, poly_polar_list]
 
-def make_pop_readable(population, sequence_list, smiles_list):
+    return elec_prop_lists
+
+def fitness_fn(opt_property, poly_property_list):
     '''
-    Returns population with polymers in human readable format:
-    [[alpha sequence], 'monomer SMILES string 1', .., 'monomer SMILES string X']
-
-    Parameters
-    ---------
-    population: list
-        list of polymers in population
-    sequence_list: list
-        list of sequences
-    smiles_list: list
-        list of monomer SMILES
-    Returns
-    -------
-    readable_poly: list
-        readable list of polymer information
-    '''
-    # create dict mapping numbers [start index 0] to uppercase English alphabet
-    alpha_dict = dict(zip(range(26), string.ascii_uppercase))
-
-    readable_poly = []
-    for polymer in population:
-        temp_poly = []
-
-        # find numerical sequence from index of sequence_list
-        temp_numer_seq = polymer[0]
-        # translate numerical sequence into alphabetic sequence
-        temp_alpha_seq = []
-        for number in temp_numer_seq:
-            temp_alpha_seq.append(alpha_dict[number])
-        temp_poly.append(temp_alpha_seq)
-
-        for monomer_index in polymer[1:]:
-            # find monomer SMILES string from index of smiles_list
-            temp_mono_smiles = smiles_list[monomer_index]
-            temp_poly.append(temp_mono_smiles)
-
-        readable_poly.append(temp_poly)
-
-    return readable_poly
-
-def fitness_fn(opt_property, population, poly_property_list):
-    '''
-    Fitness function ranking current population members
+    Ranks polymers in population based on associated property values
     Rank 0 = best
 
     Parameters
     ---------
     opt_property: str
         property being optimized
-    population: list
-        list of polymers in population
     poly_prop_list: list
-        list of properties of the polymers
+        list of property values corresponding to polymers in population
 
     Returns
     -------
     ranked_indicies: list
-        ranked list of polymers with first entry being best
+        list of ranked polymer indicies with first entry being best
     '''
-    # rank based on highest property value = best
+    # rank polymers based on highest property value = best
     if opt_property == "mw" or "dip":
-        # gives indicies in ascending order
+        # make list of indicies of polymers in population, sorted based on property values
         ranked_indicies = list(np.argsort(poly_property_list))
-        # print(ranked_indicies)
         # reverse list so highest property value = 0th
-        # ranked_indicies[::-1]
         ranked_indicies.reverse()
-        # print('\n\n\n', ranked_indicies)
     else:
         print("Error: opt_property not recognized. trace:fitness_fn")
+
     return ranked_indicies
 
 def parent_select(opt_property, population, poly_property_list):
     '''
-    Return top half of the population
+    Finds top half of population
 
     Parameters
     ---------
@@ -341,11 +262,14 @@ def parent_select(opt_property, population, poly_property_list):
     parent_list: list
         top half of population
     '''
+    # find number of parents (half of population)
     parent_count = int(len(population) / 2)
+
+    # make list of ranked polymer indicies
+    fitness_list = fitness_fn(opt_property, poly_property_list)
+
+    # make list of top polymers
     parent_list = []
-
-    fitness_list = fitness_fn(opt_property, population, poly_property_list)
-
     for x in range(parent_count):
         parent_list.append(population[fitness_list[x]])
 
@@ -353,12 +277,12 @@ def parent_select(opt_property, population, poly_property_list):
 
 def mutate(polymer, sequence_list, smiles_list, mono_list):
     '''
-    Mutates polymer
+    Creates point mutation in given polymer if polymer is selected for mutation
 
     Parameters
     ---------
-    polymer: [(#,#,#,#), A, B]
-        ???
+    polymer: list (specific format)
+        [(#,#,#,#), A, B]
     sequence_list: list
         list of sequences
     smiles_list: list
@@ -366,14 +290,15 @@ def mutate(polymer, sequence_list, smiles_list, mono_list):
 
     Returns
     -------
-    polymer: ???
-        polymer string ???)
+    polymer: list (specific format)
+        [(#,#,#,#), A, B]
     '''
 
-    # determine whether to mutate
+    # set mutation rate
     mut_rate = 0.4
-    rand = random.randint(1,10)
 
+    # determine whether to mutate based on mutation rate
+    rand = random.randint(1,10)
     if rand <= (mut_rate*10):
         pass
     else:
@@ -393,10 +318,22 @@ def mutate(polymer, sequence_list, smiles_list, mono_list):
         # increase frequency count for monomer in mono_list
         mono_list[new_mono][1] += 1
 
-
     return polymer
 
 def weighted_random_pick(mono_list):
+    '''
+    Selects random monomer based on weighted (frequency) system
+
+    Parameters
+    ---------
+    mono_list: list (specific format)
+        [[monomer index, frequency]]
+
+    Returns
+    -------
+    mono_idx: int
+        index of selected randomly chosen monomer
+    '''
 
     ordered_mono_list = deepcopy(mono_list)
 
@@ -421,36 +358,40 @@ def weighted_random_pick(mono_list):
         else:
             rand_num -= freq
 
-
-def crossover_mutate(parent_list, pop_size, num_type_mono, sequence_list, smiles_list, mono_list):
+def crossover_mutate(parent_list, pop_size, poly_size, num_mono_species, sequence_list, smiles_list, mono_list):
     '''
-    Crossover of polymers
+    Performs crossover and mutation functions on given population
+    TODO: fix possible duplication problem after mutation
 
     Parameters
     ---------
     parent_list: list
-        list of parents
+        list of parent polymers
     pop_size: int
         number of polymers in each generation
-    num_type_mono: int
-        number of types of monomer per polymer
+    num_mono_species: int
+        number of monomer species in each polymer (e.g. copolymer = 2)
     sequence_list: list
         list of sequences
     smiles_list: list
-        list of monomer SMILES
+        list of all possible monomer SMILES
 
     Returns
     -------
     new_pop: list
-        crossover population list
+        population list after crossover and mutation
     '''
-    # calculate number of children to generate
-    #num_children = pop_size - len(parent_list)
+
     # initialize new population with parents
     new_pop = deepcopy(parent_list)
+    new_pop_str = []
+    for parent in new_pop:
+        parent_str = make_polymer_str(parent, smiles_list, poly_size)
+        new_pop_str.append(parent_str)
 
+    # loop until enough children have been added to reach population size
     while len(new_pop) < pop_size:
-        #for child in range(num_children):
+
         # randomly select two parents (as indexes from parent list) to cross
         parent_a = random.randint(0, len(parent_list) - 1)
         parent_b = random.randint(0, len(parent_list) - 1)
@@ -461,13 +402,14 @@ def crossover_mutate(parent_list, pop_size, num_type_mono, sequence_list, smiles
                 parent_b = random.randint(0, len(parent_list) - 1)
 
         # determine number of monomers taken from parent A
-        num_mono_a = random.randint(1, num_type_mono)
+        num_mono_a = random.randint(1, num_mono_species)
 
         # randomly determine which parent's sequence will be used
         par_seq = random.randint(0, 1)
 
         # create hybrid child
         temp_child = []
+
         # give child appropriate parent's sequence
         if par_seq == 0:
             temp_child.append(parent_list[parent_a][0])
@@ -477,104 +419,28 @@ def crossover_mutate(parent_list, pop_size, num_type_mono, sequence_list, smiles
         # give child first half monomers from A, second half from B
         for monomer in range(1, num_mono_a + 1):
             temp_child.append(parent_list[parent_a][monomer])
-        if num_mono_a < num_type_mono:
-            for monomer in range(num_mono_a + 1, num_type_mono + 1):
+        if num_mono_a < num_mono_species:
+            for monomer in range(num_mono_a + 1, num_mono_species + 1):
                 temp_child.append(parent_list[parent_b][monomer])
 
-        #new_pop.append(temp_child)
-        #counter += 1
-
-        # mutate
+        # give child opportunity for mutation
         temp_child = mutate(temp_child, sequence_list, smiles_list, mono_list)
 
+        temp_child_str = make_polymer_str(temp_child, smiles_list, poly_size)
+
         #try to avoid duplicates in population, but prevent infinite loop if unique individual not found after so many attempts
-        if temp_child in new_pop:
+        # TODO: fix possible duplication problem after mutation
+        if temp_child_str in new_pop_str:
             pass
         else:
             new_pop.append(temp_child)
+            new_pop_str.append(temp_child_str)
 
     return new_pop
 
-def get_mono_ranks(mono_list):
+def sort_mono_indicies_list(mono_list):
     '''
-    Make list of ranks of monomers by usage
-
-    Parameters
-    ---------
-    mono_list: list (specific format)
-        [[monomer index, frequency]]
-
-    Returns
-    -------
-    mono_ranks: list
-        list of monomer ranks (by usage) in order of monomer SMILES list indicies
-    '''
-
-    ordered_mono_list = deepcopy(mono_list)
-
-    # sort based on frequencies, put in descending order (highest first)
-    ordered_mono_list = sorted(ordered_mono_list, key = lambda monomer: monomer[1], reverse = True)
-
-    # add ranks(sorted order number) to list of mono indicies and freqs(sorted order number)
-    for x in range(len(ordered_mono_list)):
-        ordered_mono_list[x].append(x)
-
-    # reorder list by monomer index (lowest first)
-    ordered_mono_list = sorted(ordered_mono_list, key = lambda monomer: monomer[0])
-
-    #print("ordered_mono_list", ordered_mono_list)
-
-    # extract list of ranks in order of monomer indicies
-    mono_ranks = []
-    for x in range(len(ordered_mono_list)):
-        mono_ranks.append(ordered_mono_list[x][2])
-
-    #print("mono ranks", mono_ranks)
-    return mono_ranks
-
-def get_spearman_ranks(mono_list, init_mono_indicies):
-    '''
-    Create nested list of numerical rank with monomer index (rank 0 = most freq momomer)
-    Order by frequency (most freq monomer index first)
-    Rank are initial ranks in new order
-
-    Parameters
-    ---------
-    mono_list: list (specific format)
-        [[monomer index, frequency]]
-
-    Returns
-    -------
-    mono_spear_ranks: list (specific format)
-        [[initial ranks], [final ranks]]
-    '''
-
-    init_mono_ranks = list(range(len(mono_list)))
-
-    # make list of mono indicies in order of freq, highest first
-    final_mono_indicies = make_mono_indicies_list(mono_list)
-
-    # make list of monomer indicies and their ranks (most freq first with lowest rank)
-    final_mono_ranks = []
-    for x in range(len(final_mono_indicies)):
-        mono_idx = final_mono_indicies[x]
-        rank = init_mono_indicies.index(mono_idx)
-        final_mono_ranks.append(rank)
-
-    mono_spear_ranks = [init_mono_ranks, final_mono_ranks]
-
-    '''
-    print("initial ranks \n:", init_mono_ranks)
-    print(init_mono_indicies)
-    print("final ranks \n:", final_mono_ranks)
-    print(final_mono_indicies)
-    '''
-
-    return mono_spear_ranks
-
-def make_mono_indicies_list(mono_list):
-    '''
-    Make list of all monomer indicies ordered by frequency (highest first)
+    Makes list of all monomer indicies ordered by frequency (highest first)
 
     Parameters
     ---------
@@ -597,20 +463,18 @@ def make_mono_indicies_list(mono_list):
     for x in range(len(ordered_mono_list)):
         mono_indicies.append(ordered_mono_list[x][0])
 
-    #print(mono_indicies)
-
     return mono_indicies
 
-def construct_polymer_string(polymer, smiles_list, poly_size):
+def make_polymer_str(polymer, smiles_list, poly_size):
     '''
-    Construction of polymer from monomers, adds standard end groups [amino and nitro]
+    Constructs polymer string from monomers, adds standard end groups [amino and nitro]
 
     Parameters
     ---------
     polymer: list (specific format)
         [(#,#,#,#), A, B]
     smiles_list: list
-        list of monomer SMILES
+        list of all possible monomer SMILES
     poly_size: int
         number of monomers per polymer
 
@@ -621,18 +485,18 @@ def construct_polymer_string(polymer, smiles_list, poly_size):
     '''
     poly_string = ''
 
-    #add amino end group
+    # add amino end group
     poly_string = poly_string + "N"
 
+    # cycle over monomer sequence until total number of monomers in polymer is reached
     cycle = 0
-    # loop over total monomers in each polymer
     for i in range(poly_size):
-        # cycle over monomer sequence until total number of monomers is reached
         seq_cycle_location = i - cycle * (len(polymer[0]))
         seq_monomer_index = polymer[0][seq_cycle_location]
         if seq_cycle_location == (len(polymer[0]) - 1):
             cycle += 1
-        # find index in polymer of monomer index (from smiles_list) from given sequence value
+
+        # find monomer index from given sequence location in polymer
         monomer_index = polymer[seq_monomer_index + 1]
         poly_string = poly_string + smiles_list[monomer_index]
 
@@ -647,9 +511,9 @@ def main():
     pop_size = 32
     # number of monomers per polymer
     poly_size = 6
-    # number of types of monomers in each polymer
-    num_type_mono = 2
-    # number of monomers in imported monomer list
+    # number of species of monomers in each polymer
+    num_mono_species = 2
+    # number of all possible monomers in imported monomer list
     mono_list_size = 1234
 
     # property of interest (options: molecular weight 'mw', dipole moment 'dip')
@@ -659,7 +523,6 @@ def main():
     read_file = open('../input_files/1235MonomerList.txt', 'r')
     # read_file = open('/ihome/ghutchison/dch45/Chem_GA_Project/input_files/1235MonomerList.txt', 'r')
 
-
     # create list of monomer SMILES strings
     # assumes input file has one monomer per line
     smiles_list = []
@@ -667,21 +530,19 @@ def main():
         # grab first token from each line
         temp = line.split()[0]
         smiles_list.append(temp)
-
     read_file.close()
 
-    #create monomer list [(mono index 1, frequency), (mono index 2, frequency),...]
-
+    #create monomer frequency list [(mono index 1, frequency), (mono index 2, frequency),...]
     mono_list = []
     for x in range(len(smiles_list)):
         mono_list.append([x, 0])
 
     # create all possible numerical sequences for given number of monomer types
-    sequence_list = find_sequences(num_type_mono)
-
+    sequence_list = find_sequences(num_mono_species)
 
     # create inital population as list of polymers
     population = []
+    population_str = []
     counter = 0
     while counter < pop_size:
         # for polymer in range(pop_size):
@@ -692,19 +553,23 @@ def main():
         temp_poly.append(poly_seq)
 
         # select monomer types for polymer
-        for num in range(num_type_mono):
+        for num in range(num_mono_species):
             # randomly select a monomer index
             poly_monomer = random.randint(0, len(smiles_list) - 1)
             temp_poly.append(poly_monomer)
             # increase frequency count for monomer in mono_list
             mono_list[poly_monomer][1] += 1
 
+        # make SMILES string of polymer
+        temp_poly_str = make_polymer_str(temp_poly, smiles_list, poly_size)
+
         # add polymer to population
-        # check for duplication
-        if temp_poly in population:
+        # check for duplication - use str for comparison to avoid homopolymer, etc. type duplicates
+        if temp_poly_str in population_str:
             pass
         else:
             population.append(temp_poly)
+            population_str.append(temp_poly_str)
             counter += 1
 
     # find initial population properties
@@ -715,7 +580,7 @@ def main():
             temp_mono = pybel.readstring("smi", monomer).molwt
             mw_list.append(temp_mono)
         # Calculate polymer molecular weights
-        poly_property_list = find_poly_mw(population, poly_size, mw_list)
+        poly_property_list = find_poly_mw(population, poly_size, smiles_list)
     elif opt_property == 'dip':
         # calculate dipole moments for each polymer
         poly_property_list = find_elec_prop(population, poly_size, smiles_list)[0]
@@ -728,7 +593,7 @@ def main():
     # set initial values for min, max, and avg polymer weights
     min_test = min(poly_property_list)
     max_test = max(poly_property_list)
-    avg_test = (max_test - min_test) / 2.0
+    avg_test = mean(poly_property_list)
 
     # create new output files
     analysis_file = open('gens_analysis.txt', 'w+')
@@ -743,17 +608,10 @@ def main():
     #capture initial population data
     analysis_file.write('%f, %f, %f, n/a, \n' % (min_test, max_test, avg_test))
 
+    # write polymer population to file
     for polymer in population:
-        # capture monomer indexes and numerical sequence as strings for population file
-        mono1 = str(polymer[1])
-        mono2 = str(polymer[2])
-        seq = polymer[0]
-        # create string of actual length sequence (e.g. hexamer when poly_size = 6)
-        triple_seq = seq + seq + seq
-        true_length_seq = ''.join(str(triple_seq[i]) for i in range(poly_size))
-
-        population_file.write('%s_%s_%s, ' % (mono1, mono2, true_length_seq))
-
+        poly_name = make_file_name(polymer, poly_size)
+        population_file.write('%s, ' % (poly_name))
     population_file.write('\n')
 
     for value in poly_property_list:
@@ -776,17 +634,17 @@ def main():
         gen_counter += 1
 
         # create sorted monomer list with most freq first
-        gen1 = make_mono_indicies_list(mono_list)
+        gen1 = sort_mono_indicies_list(mono_list)
 
         # Selection - select heaviest (best) 50% of polymers as parents
         population = parent_select(opt_property, population, poly_property_list)
 
         # Crossover & Mutation - create children to repopulate bottom 50% of polymers in population
-        population = crossover_mutate(population, pop_size, num_type_mono, sequence_list, smiles_list, mono_list)
+        population = crossover_mutate(population, pop_size, poly_size, num_mono_species, sequence_list, smiles_list, mono_list)
 
         # calculate desired polymer property
         if opt_property == "mw":
-            poly_property_list = find_poly_mw(population, poly_size, mw_list)
+            poly_property_list = find_poly_mw(population, poly_size, smiles_list)
         elif opt_property == "dip":
             poly_property_list = find_elec_prop(population, poly_size, smiles_list)[0]
         elif opt_property == 'pol':
@@ -800,32 +658,23 @@ def main():
         avg_test = mean(poly_property_list)
 
         # create sorted monomer list with most freq first
-        gen2 = make_mono_indicies_list(mono_list)
+        gen2 = sort_mono_indicies_list(mono_list)
 
-        # calculate monomer idx method Spearman correlation coefficient
+        # calculate Spearman correlation coefficient for begin and end sorted monomer lists
         spear = stats.spearmanr(gen1[:n], gen2[:n])[0]
 
         # capture monomer indexes and numerical sequence as strings for population file
         analysis_file.write('%f, %f, %f, %f, \n' % (min_test, max_test, avg_test, spear))
 
+        # write polymer population to file
         for polymer in population:
-            # capture monomer indexes and numerical sequence as strings for population file
-            mono1 = str(polymer[1])
-            mono2 = str(polymer[2])
-            seq = polymer[0]
-            # create string of actual length sequence (e.g. hexamer when poly_size = 6)
-            triple_seq = seq + seq + seq
-            true_length_seq = ''.join(str(triple_seq[i]) for i in range(poly_size))
-
-            population_file.write('%s_%s_%s, ' % (mono1, mono2, true_length_seq))
-
+            poly_name = make_file_name(polymer, poly_size)
+            population_file.write('%s, ' % (poly_name))
         population_file.write('\n')
 
         for value in poly_property_list:
             values_file.write('%f, ' % (value))
-
         values_file.write('\n')
-
 
         # keep track of number of successive generations meeting Spearman criterion
         if spear > 0.92:
@@ -834,7 +683,6 @@ def main():
             spear_counter = 0
 
 
-    print(max_test, gen_counter)
 
     # close all output files
     analysis_file.close()
