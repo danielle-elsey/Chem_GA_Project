@@ -19,7 +19,6 @@ from copy import deepcopy
 import shlex
 import pandas as pd
 #import forkmap
-from fork import fork
 
 ob = pybel.ob
 
@@ -199,9 +198,10 @@ def find_elec_prop(population, poly_size, smiles_list):
     poly_dipole_list = []
     
     #run xTB geometry optimization
-    nproc = 8
+    #nproc = 8
     for polymer in population:
-        fork(run_geo_opt, polymer, poly_size, smiles_list, n=nproc)
+        #forkmap.map(run_geo_opt, polymer, poly_size, smiles_list, n=nproc)
+        run_geo_opt(polymer, poly_size, smiles_list)
 
     # parse xTB output files
     for polymer in population:   
@@ -543,7 +543,7 @@ def main():
     mono_list_size = 1234
 
     # property of interest (options: molecular weight 'mw', dipole moment 'dip')
-    opt_property = "dip"
+    opt_property = "pol"
 
     # Read in monomers from input file
     # read_file = open('../input_files/1235MonomerList.txt', 'r')
@@ -616,8 +616,13 @@ def main():
         poly_property_list = elec_prop_list[0]
         polar_list = elec_prop_list[1]
     elif opt_property == 'pol':
-        # calculate polarizabilities for each polymer
-        poly_property_list = find_elec_prop(population, poly_size, smiles_list)[1]
+        #initialize list of dipole moments
+        dip_list = []
+        # calculate electronic properties for each polymer
+        elec_prop_list = find_elec_prop(population, poly_size, smiles_list)
+        poly_property_list = elec_prop_list[1]
+        dip_list = elec_prop_list[0]
+        
     else:
         print("Error: opt_property not recognized. trace:main:initial pop properties")
 
@@ -631,6 +636,10 @@ def main():
     if opt_property == 'dip':
         compound = make_file_name(population[poly_property_list.index(max_test)], poly_size)
         polar_val = polar_list[poly_property_list.index(max_test)]
+        
+    if opt_property == 'pol':
+        compound = make_file_name(population[poly_property_list.index(max_test)], poly_size)
+        dip_val = dip_list[poly_property_list.index(max_test)]
 
     # create new output files
     analysis_file = open('gens_analysis.txt', 'w+')
@@ -638,6 +647,8 @@ def main():
     values_file = open('gens_values.txt', 'w+')
     if opt_property == 'dip':
         dip_polar_file = open('gens_dip_polar.txt', 'w+')
+    if opt_property == 'pol':
+        polar_dip_file = open('gens_polar_dip.txt', 'w+')
     spear_file = open('gens_spear.txt', 'w+')
 
     # write files headers
@@ -646,12 +657,16 @@ def main():
     values_file.write('%s values \n' % (opt_property))
     if opt_property == 'dip':
         dip_polar_file.write('compound, gen, dipole, polar \n')
+    if opt_property == 'pol':
+        polar_dip_file.write('compound, gen, polar, dip \n')
     spear_file.write('gen, spear_05, spear_10, spear_15 \n')
 
     #capture initial population data
     analysis_file.write('%f, %f, %f, n/a, \n' % (min_test, max_test, avg_test))
     if opt_property == 'dip':
         dip_polar_file.write('%s, %d, %f, %f, \n' % (compound, 1, max_test, polar_val))
+    if opt_property == 'pol':
+        polar_dip_file.write('%s, %d, %f, %f, \n' % (compound, 1, max_test, dip_val))
     spear_file.write('1, n/a, n/a, n/a, \n')
 
     # write polymer population to file
@@ -670,6 +685,8 @@ def main():
     values_file.close()
     if opt_property == 'dip':
         dip_polar_file.close()
+    if opt_property == 'pol':
+        polar_dip_file.close()
     spear_file.close()
     
     # make backup copies of output files
@@ -678,6 +695,8 @@ def main():
     shutil.copy('gens_values.txt', 'gens_values_copy.txt')
     if opt_property == 'dip':
         shutil.copy('gens_dip_polar.txt', 'gens_dip_polar_copy.txt')
+    if opt_property == 'pol':
+        shutil.copy('gens_polar_dip.txt', 'gens_polar_dip_copy.txt')
     shutil.copy('gens_spear.txt', 'gens_spear_copy.txt')
 
     # Loop
@@ -698,13 +717,15 @@ def main():
     prop_value_counter = 0
 
     #while spear_counter < 10 or prop_value_counter < 10:
-    for x in range(1):
+    for x in range(100):
         # open output files
         analysis_file = open('gens_analysis.txt', 'a+')
         population_file = open('gens_population.txt', 'a+')
         values_file = open('gens_values.txt', 'a+')
         if opt_property == 'dip':
             dip_polar_file = open('gens_dip_polar.txt', 'a+')
+        if opt_property == 'pol':
+            polar_dip_file = open('gens_polar_dip.txt', 'a+')
         spear_file = open('gens_spear.txt', 'a+')
         
         
@@ -729,7 +750,9 @@ def main():
             poly_property_list = elec_prop_list[0]
             polar_list = elec_prop_list[1]
         elif opt_property == 'pol':
-            poly_property_list = find_elec_prop(population, poly_size, smiles_list)[1]
+            elec_prop_list = find_elec_prop(population, poly_size, smiles_list)
+            poly_property_list = elec_prop_list[1]
+            dip_list = elec_prop_list[0]
         else:
             print("Error: opt_property not recognized. trace:main:loop pop properties")
 
@@ -741,6 +764,10 @@ def main():
         if opt_property == 'dip':
             compound = make_file_name(population[poly_property_list.index(max_test)], poly_size)
             polar_val = polar_list[poly_property_list.index(max_test)]
+            
+        if opt_property == 'pol':
+            compound = make_file_name(population[poly_property_list.index(max_test)], poly_size)
+            dip_val = dip_list[poly_property_list.index(max_test)]
 
         # create sorted monomer list with most freq first
         gen2 = sort_mono_indicies_list(mono_list)
@@ -756,6 +783,8 @@ def main():
         analysis_file.write('%f, %f, %f, %f, \n' % (min_test, max_test, avg_test, spear))
         if opt_property == 'dip':
             dip_polar_file.write('%s, %d, %f, %f, \n' % (compound, gen_counter, max_test, polar_val))
+        if opt_property == 'pol':
+            polar_dip_file.write('%s, %d, %f, %f, \n' % (compound, gen_counter, max_test, dip_val))
         spear_file.write('%d, %f, %f, %f, \n' % (gen_counter, spear_05, spear_10, spear_15))
 
 
@@ -787,6 +816,8 @@ def main():
         values_file.close()
         if opt_property == 'dip':
             dip_polar_file.close()
+        if opt_property == 'pol':
+            polar_dip_file.close()
         spear_file.close()
         
         # make backup copies of output files
@@ -795,6 +826,8 @@ def main():
         shutil.copy('gens_values.txt', 'gens_values_copy.txt')
         if opt_property == 'dip':
             shutil.copy('gens_dip_polar.txt', 'gens_dip_polar_copy.txt')
+        if opt_property == 'pol':
+            shutil.copy('gens_polar_dip.txt', 'gens_polar_dip_copy.txt')
         shutil.copy('gens_spear.txt', 'gens_spear_copy.txt')
 
     #remove unnecessary copies
