@@ -18,8 +18,8 @@ from itertools import product
 from copy import deepcopy
 import shlex
 import pandas as pd
-#import forkmap
-from fork import fork
+import fork
+import itertools
 
 ob = pybel.ob
 
@@ -49,8 +49,8 @@ def make3D(mol):
     ff.ConjugateGradients(250, 1.0e-4)
 
     ff.GetCoordinates(mol.OBMol)
-    
-    
+
+
 def find_sequences(num_mono_species):
     '''
     Finds all possible sequences
@@ -74,6 +74,19 @@ def find_sequences(num_mono_species):
 
     return numer_seqs
 
+def run_mw_calc(polymer, smiles_list, poly_size):
+
+    # make polymer into SMILES string
+    poly_smiles = make_polymer_str(polymer, smiles_list, poly_size)
+    # make polymer string into pybel molecule object
+    mol = pybel.readstring('smi', poly_smiles)
+
+    # add mw of polymer to list
+    poly_mw = mol.molwt
+
+    return poly_mw
+
+
 def find_poly_mw(population, poly_size, smiles_list):
     '''
     Calculates molecular weight of polymers
@@ -93,17 +106,24 @@ def find_poly_mw(population, poly_size, smiles_list):
         list of molecular weights of polymers in population
     '''
     poly_mw_list = []
-    for polymer in population:
-        # make polymer into SMILES string
-        poly_smiles = make_polymer_str(polymer, smiles_list, poly_size)
-        # make polymer string into pybel molecule object
-        mol = pybel.readstring('smi', poly_smiles)
 
-        # add mw of polymer to list
-        poly_mw = mol.molwt
-        poly_mw_list.append(poly_mw)
+    poly_mw_list = list(fork.map(run_mw_calc, population, itertools.repeat(smiles_list), itertools.repeat(poly_size)))
+    # print(type(poly_mw_list))
+    poly_mw_l = []
+    for i in range(len(poly_mw_list)):
+        poly_mw_l.append(float(poly_mw_list[i]))
 
-    return poly_mw_list
+    # print(poly_mw_list)
+    #for polymer in population:
+
+
+        #poly_mw_list = fork(run_mw_calc, polymer, smiles_list, poly_size)
+        #print('poly_mw_list', poly_mw_list)
+        #poly_mw = run_mw_calc(polymer, smiles_list, poly_size)
+
+        #poly_mw_list.append(poly_mw)
+
+    return poly_mw_l
 
 def make_file_name(polymer, poly_size):
     '''
@@ -151,13 +171,13 @@ def run_geo_opt(polymer, poly_size, smiles_list):
     '''
     # make file name string w/ convention monoIdx1_monoIdx2_fullNumerSequence
     file_name = make_file_name(polymer, poly_size)
-    
+
     #if output file already exists, skip xTB
     exists = os.path.isfile('output/%s.out' % (file_name))
     if exists:
         print("output file existed")
         return
-            
+
     # make polymer into SMILES string
     poly_smiles = make_polymer_str(polymer, smiles_list, poly_size)
 
@@ -197,17 +217,18 @@ def find_elec_prop(population, poly_size, smiles_list):
 
     poly_polar_list = []
     poly_dipole_list = []
-    
+
     #run xTB geometry optimization
     nproc = 8
     for polymer in population:
-        fork(run_geo_opt, polymer, poly_size, smiles_list, n=nproc)
+        #fork(run_geo_opt, polymer, poly_size, smiles_list, n=nproc)
+        run_geo_opt(polymer, poly_size, smiles_list)
 
     # parse xTB output files
-    for polymer in population:   
-         # make file name string w/ convention monoIdx1_monoIdx2_fullNumerSequence
+    for polymer in population:
+        # make file name string w/ convention monoIdx1_monoIdx2_fullNumerSequence
         file_name = make_file_name(polymer, poly_size)
-        
+
         # check for xTB failures
         if 'FAILED!' in open('output/%s.out' % (file_name)).read():
             # move output file to 'failed' directory
@@ -543,11 +564,11 @@ def main():
     mono_list_size = 1234
 
     # property of interest (options: molecular weight 'mw', dipole moment 'dip')
-    opt_property = "dip"
+    opt_property = "mw"
 
     # Read in monomers from input file
-    # read_file = open('../input_files/1235MonomerList.txt', 'r')
-    read_file = open('/ihome/ghutchison/dch45/Chem_GA_Project/input_files/1235MonomerList.txt', 'r')
+    read_file = open('../input_files/1235MonomerList.txt', 'r')
+    # read_file = open('/ihome/ghutchison/dch45/Chem_GA_Project/input_files/1235MonomerList.txt', 'r')
 
     # create list of monomer SMILES strings
     # assumes input file has one monomer per line
@@ -663,7 +684,7 @@ def main():
     for value in poly_property_list:
         values_file.write('%f, ' % (value))
     values_file.write('\n')
-    
+
     # close all output files
     analysis_file.close()
     population_file.close()
@@ -671,7 +692,7 @@ def main():
     if opt_property == 'dip':
         dip_polar_file.close()
     spear_file.close()
-    
+
     # make backup copies of output files
     shutil.copy('gens_analysis.txt', 'gens_analysis_copy.txt')
     shutil.copy('gens_population.txt', 'gens_population_copy.txt')
@@ -698,7 +719,7 @@ def main():
     prop_value_counter = 0
 
     #while spear_counter < 10 or prop_value_counter < 10:
-    for x in range(1):
+    for x in range(10):
         # open output files
         analysis_file = open('gens_analysis.txt', 'a+')
         population_file = open('gens_population.txt', 'a+')
@@ -706,10 +727,10 @@ def main():
         if opt_property == 'dip':
             dip_polar_file = open('gens_dip_polar.txt', 'a+')
         spear_file = open('gens_spear.txt', 'a+')
-        
-        
+
+
         gen_counter += 1
-        
+
         max_init = max(poly_property_list)
 
         # create sorted monomer list with most freq first
@@ -774,13 +795,13 @@ def main():
             spear_counter += 1
         else:
             spear_counter = 0
-            
+
         # keep track of number of successive generations meeting property value convergence criterion
         if max_test >= (max_init - max_init*0.05) and max_test <= (max_init + max_init*0.05):
             prop_value_counter += 1
         else:
             prop_value_counter = 0
-            
+
         # close all output files
         analysis_file.close()
         population_file.close()
@@ -788,7 +809,7 @@ def main():
         if opt_property == 'dip':
             dip_polar_file.close()
         spear_file.close()
-        
+
         # make backup copies of output files
         shutil.copy('gens_analysis.txt', 'gens_analysis_copy.txt')
         shutil.copy('gens_population.txt', 'gens_population_copy.txt')
@@ -799,6 +820,7 @@ def main():
 
     #remove unnecessary copies
     del_copies = subprocess.call('(rm -f *_copy.txt)', shell=True)
+    print(max_test, gen_counter)
 
 
 
