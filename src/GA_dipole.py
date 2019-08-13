@@ -123,14 +123,13 @@ def make_file_name(polymer, poly_size):
         e.g. 100_200_101010 for a certain hexamer
     '''
 
-    # capture monomer indexes and numerical sequence as strings for file naming
+    # capture monomer indexes as strings for file naming
     mono1 = str(polymer[1])
     mono2 = str(polymer[2])
-    seq = polymer[0]
 
     # make string of actual length sequence (e.g. hexamer when poly_size = 6)
-    triple_seq = seq + seq + seq
-    true_length_seq = ''.join(str(triple_seq[i]) for i in range(poly_size))
+    seq = list(polymer[0] * ((poly_size // 4) + 1))[:poly_size]
+    true_length_seq = ''.join(map(str, seq))
 
     # make file name string
     file_name = '%s_%s_%s' % (mono1, mono2, true_length_seq)
@@ -171,13 +170,18 @@ def run_geo_opt(polymer, poly_size, smiles_list):
     # write polymer .xyz file to containing folder
     mol.write('xyz', 'input/%s.xyz' % (file_name), overwrite=True)
 
+    # make directory to run xtb in for the polymer
+    mkdir_poly = subprocess.call('(mkdir %s)' % (file_name), shell=True)
+
     # run xTB geometry optimization
-    xtb = subprocess.call('(/ihome/ghutchison/geoffh/xtb/xtb input/%s.xyz --opt >output/%s.out)' %
-                          (file_name, file_name), shell=True)
+    xtb = subprocess.call('(cd %s && /ihome/ghutchison/geoffh/xtb/xtb ../input/%s.xyz --opt >../output/%s.out)' %
+                          (file_name, file_name, file_name), shell=True)
 
     save_opt_file = subprocess.call(
-        '(cp xtbopt.xyz opt/%s_opt.xyz)' % (file_name), shell=True)
-    del_restart = subprocess.call('(rm -f *restart)', shell=True)
+        '(cp %s/xtbopt.xyz opt/%s_opt.xyz)' % (file_name, file_name), shell=True)
+
+    # delete xtb run directory for the polymer
+    del_polydir = subprocess.call('(rm -r %s)' % (file_name), shell=True)
 
 
 def find_elec_prop(population, poly_size, smiles_list):
