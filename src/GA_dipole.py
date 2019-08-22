@@ -266,7 +266,10 @@ def parent_select(opt_property, population, poly_property_list):
     parent_count = int(len(population) / 2)
 
     # make list of ranked polymer indicies
-    fitness_list = fitness_fn(opt_property, poly_property_list)
+    if opt_property != 'dip_pol':
+        fitness_list = fitness_fn(opt_property, poly_property_list)
+    else:
+        fitness_list = fitness_fn_multi('dip', poly_property_list[0], 'pol', poly_property_list[1])
 
     # make list of top polymers
     parent_list = []
@@ -500,14 +503,25 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_l
         elec_prop_list = find_elec_prop(population, poly_size, smiles_list)
         poly_property_list = elec_prop_list[1]
         dip_list = elec_prop_list[0]
-
+    elif opt_property == 'dip_pol':
+        # calculate electronic properties for each polymer
+        elec_prop_list = find_elec_prop(population, poly_size, smiles_list)
+        # store list of dipole moments and list of polarizabilities
+        poly_property_list = []
+        poly_propery_list.append(elec_prop_list[0])
+        poly_property_list.append(elec_prop_list[1])
     else:
         print("Error: opt_property not recognized. trace:main:initial pop properties")
 
     # set initial values for min, max, and avg polymer weights
-    min_test = min(poly_property_list)
-    max_test = max(poly_property_list)
-    avg_test = mean(poly_property_list)
+    if opt_property != 'dip_pol':
+        min_test = min(poly_property_list)
+        max_test = max(poly_property_list)
+        avg_test = mean(poly_property_list)
+    else:
+        min_test = [min(poly_property_list[0]), min(poly_property_list[1])]
+        max_test = [max(poly_property_list[0]), max(poly_property_list[1])]
+        avg_test = [mean(poly_property_list[0]), mean(poly_property_list[1])]
 
     if opt_property == 'dip':
         compound = utils.make_file_name(
@@ -625,7 +639,8 @@ def next_gen(params):
 
     gen_counter += 1
 
-    max_init = max(poly_property_list)
+    if opt_property != 'dip_pol':
+        max_init = max(poly_property_list)
 
     # create sorted monomer list with most freq first
     gen1 = utils.sort_mono_indicies_list(mono_list)
@@ -650,13 +665,26 @@ def next_gen(params):
         elec_prop_list = find_elec_prop(population, poly_size, smiles_list)
         poly_property_list = elec_prop_list[1]
         dip_list = elec_prop_list[0]
+    elif opt_property == 'dip_pol':
+        # calculate electronic properties for each polymer
+        elec_prop_list = find_elec_prop(population, poly_size, smiles_list)
+        # store list of dipole moments and list of polarizabilities
+        poly_property_list = []
+        poly_propery_list.append(elec_prop_list[0])
+        poly_property_list.append(elec_prop_list[1])
     else:
         print("Error: opt_property not recognized. trace:main:loop pop properties")
 
     # record representative generation properties
-    min_test = min(poly_property_list)
-    max_test = max(poly_property_list)
-    avg_test = mean(poly_property_list)
+    if opt_property != 'dip_pol':
+        min_test = min(poly_property_list)
+        max_test = max(poly_property_list)
+        avg_test = mean(poly_property_list)
+    else:
+        min_test = [min(poly_property_list[0]), min(poly_property_list[1])]
+        max_test = [max(poly_property_list[0]), max(poly_property_list[1])]
+        avg_test = [mean(poly_property_list[0]), mean(poly_property_list[1])]
+
 
     if opt_property == 'dip':
         compound = utils.make_file_name(
@@ -707,10 +735,11 @@ def next_gen(params):
         spear_counter = 0
 
     # keep track of number of successive generations meeting property value convergence criterion
-    if max_test >= (max_init - max_init * 0.05) and max_test <= (max_init + max_init * 0.05):
-        prop_value_counter += 1
-    else:
-        prop_value_counter = 0
+    if opt_propert != 'dip_pol':
+        if max_test >= (max_init - max_init * 0.05) and max_test <= (max_init + max_init * 0.05):
+            prop_value_counter += 1
+        else:
+            prop_value_counter = 0
 
     # close all output files
     analysis_file.close()
@@ -747,7 +776,7 @@ def main():
     poly_size = 6
     # number of species of monomers in each polymer
     num_mono_species = 2
-    # property of interest (options: molecular weight 'mw', dipole moment 'dip')
+    # property of interest (options: molecular weight 'mw', dipole moment 'dip', polarizability 'pol', dipole+polar 'dip_pol')
     opt_property = "mw"
 
     # check for convergence among top 30% (or top 8, whichever is larger) candidates between 5 generations
