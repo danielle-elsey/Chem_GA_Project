@@ -198,7 +198,7 @@ def fitness_fn(opt_property, poly_property_list):
         list of ranked polymer indicies with first entry being best
     '''
     # rank polymers based on highest property value = best
-    if opt_property == "mw" or "dip":
+    if opt_property in ('mw', 'dip', 'pol') :
         # make list of indicies of polymers in population, sorted based on property values
         ranked_indicies = list(np.argsort(poly_property_list))
         # reverse list so highest property value = 0th
@@ -207,7 +207,6 @@ def fitness_fn(opt_property, poly_property_list):
         print("Error: opt_property not recognized. trace:fitness_fn")
 
     return ranked_indicies
-
 
 def parent_select(opt_property, population, poly_property_list):
     '''
@@ -369,7 +368,7 @@ def crossover_mutate(parent_list, pop_size, poly_size, num_mono_species, sequenc
     return new_pop
 
 
-def init_gen(pop_size, poly_size, num_mono_species, opt_property, smiles_list):
+def init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_list):
     '''
     Initializes parameter, creates population, and runs initial generation
 
@@ -383,6 +382,8 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, smiles_list):
         number of monomer species in each polymer (e.g. copolymer = 2)
     opt_property: str
         property being optimized
+    perc: float
+        percentage of number of monomers to compare with Spearman calculation
     smiles_list: list
         list of all possible monomer SMILES
 
@@ -394,9 +395,6 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, smiles_list):
 
     # create all possible numerical sequences for given number of monomer types
     sequence_list = utils.find_sequences(num_mono_species)
-
-    # check for convergence among top 30% (or top 8, whichever is larger) candidates between 5 generations
-    perc = 0.1
 
     n = int(len(smiles_list) * perc)
     # n_05 = int(len(smiles_list) * .05)
@@ -705,7 +703,7 @@ def next_gen(params):
 
 def main():
     # flag for restart from save
-    restart = 'y'
+    restart = 'n'
 
     # number of polymers in population
     pop_size = 32
@@ -715,6 +713,9 @@ def main():
     num_mono_species = 2
     # property of interest (options: molecular weight 'mw', dipole moment 'dip')
     opt_property = "mw"
+
+    # check for convergence among top 30% (or top 8, whichever is larger) candidates between 5 generations
+    perc = 0.1
 
     # Read in monomers from input file
     read_file = open('../input_files/1235MonomerList.txt', 'r')
@@ -743,7 +744,7 @@ def main():
 
     else:
         # run initial generation if NOT loading from restart file
-        params = init_gen(pop_size, poly_size, num_mono_species, opt_property, smiles_list)
+        params = init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_list)
 
     # set convergence counters
     spear_counter = params[11]
