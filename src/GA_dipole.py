@@ -208,6 +208,42 @@ def fitness_fn(opt_property, poly_property_list):
 
     return ranked_indicies
 
+
+def fitness_fn_multi(opt_property_1, prop_list_1, opt_property_2, prop_list_2):
+
+    if opt_property_1 in ('mw', 'dip', 'pol') :
+        # find ranks of properties
+        get_ranks = list(stats.rankdata(prop_list_1, method = 'ordinal'))
+        # convert ranks so that 1st = highest value
+        ranks_1 = []
+        for x in range (len(get_ranks)):
+            ranks_1.append(len(get_ranks)-get_ranks[x])
+    else:
+        print("Error: opt_property not recognized. trace:fitness_fn")
+
+    # make sorted list of polymer indicies based on second property
+    if opt_property_2 in ('mw', 'dip', 'pol') :
+        # find ranks of properties
+        get_ranks = list(stats.rankdata(prop_list_2, method = 'ordinal'))
+        # convert ranks so that 1st = highest value
+        ranks_2 = []
+        for x in range (len(get_ranks)):
+            ranks_2.append(len(get_ranks)-get_ranks[x])
+    else:
+        print("Error: opt_property not recognized. trace:fitness_fn")
+
+    # average ranks from both properties for each polymer
+    avg_ranks= []
+    for x in range(len(ranks_1)):
+        temp_index = mean([ranks_1[x], ranks_2[x]])
+        avg_ranks.append(temp_index)
+
+    # make list of indicies (0th = best) of polymers in population, sorted based on averaged ranks
+    ranked_indicies = list(np.argsort(avg_ranks))
+
+    return ranked_indicies
+
+
 def parent_select(opt_property, population, poly_property_list):
     '''
     Finds top half of population
