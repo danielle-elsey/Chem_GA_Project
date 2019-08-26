@@ -210,7 +210,6 @@ def fitness_fn(opt_property, poly_property_list):
 
 
 def fitness_fn_multi(opt_property_1, prop_list_1, opt_property_2, prop_list_2):
-
     if opt_property_1 in ('mw', 'dip', 'pol') :
         # find ranks of properties
         get_ranks = list(stats.rankdata(prop_list_1, method = 'ordinal'))
@@ -220,7 +219,7 @@ def fitness_fn_multi(opt_property_1, prop_list_1, opt_property_2, prop_list_2):
             ranks_1.append(len(get_ranks)-get_ranks[x])
     else:
         print("Error: opt_property not recognized. trace:fitness_fn")
-
+        
     # make sorted list of polymer indicies based on second property
     if opt_property_2 in ('mw', 'dip', 'pol') :
         # find ranks of properties
@@ -231,15 +230,17 @@ def fitness_fn_multi(opt_property_1, prop_list_1, opt_property_2, prop_list_2):
             ranks_2.append(len(get_ranks)-get_ranks[x])
     else:
         print("Error: opt_property not recognized. trace:fitness_fn")
-
+    
     # average ranks from both properties for each polymer
     avg_ranks= []
     for x in range(len(ranks_1)):
-        temp_index = mean([ranks_1[x], ranks_2[x]])
+        temp_index = mean([float(ranks_1[x]), float(ranks_2[x])])
         avg_ranks.append(temp_index)
-
-    # make list of indicies (0th = best) of polymers in population, sorted based on averaged ranks
+        
+    # make list of indicies of polymers in population, sorted based on averaged ranks
     ranked_indicies = list(np.argsort(avg_ranks))
+    # reverse list so highest property value = 0th
+    ranked_indicies.reverse()
 
     return ranked_indicies
 
@@ -508,7 +509,7 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_l
         elec_prop_list = find_elec_prop(population, poly_size, smiles_list)
         # store list of dipole moments and list of polarizabilities
         poly_property_list = []
-        poly_propery_list.append(elec_prop_list[0])
+        poly_property_list.append(elec_prop_list[0])
         poly_property_list.append(elec_prop_list[1])
     else:
         print("Error: opt_property not recognized. trace:main:initial pop properties")
@@ -544,9 +545,14 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_l
     spear_file = open('gens_spear.txt', 'w+')
 
     # write files headers
-    analysis_file.write('min, max, avg, spearman, \n')
-    population_file.write('polymer populations \n')
-    values_file.write('%s values \n' % (opt_property))
+    if opt_property != 'dip_pol':
+        analysis_file.write('min, max, avg, spearman, \n')
+        population_file.write('polymer populations \n')
+        values_file.write('%s values \n' % (opt_property))
+    else:
+        analysis_file.write('dip_min, dip_max, dip_avg, pol_min, pol_max, pol_avg, spearman, \n')
+        population_file.write('polymer populations \n')
+        values_file.write('dip values -break- pol values \n')
     if opt_property == 'dip':
         dip_polar_file.write('compound, gen, dipole, polar \n')
     if opt_property == 'pol':
@@ -554,7 +560,11 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_l
     #spear_file.write('gen, spear_05, spear_10, spear_15 \n')
 
     # capture initial population data
-    analysis_file.write('%f, %f, %f, n/a, \n' % (min_test, max_test, avg_test))
+    if opt_property != 'dip_pol':
+        analysis_file.write('%f, %f, %f, n/a, \n' % (min_test, max_test, avg_test))
+    else:
+        analysis_file.write('%f, %f, %f, %f, %f, %f, n/a, \n' % (min_test[0], max_test[0], avg_test[0], min_test[1], max_test[1], avg_test[1]))   
+        
     if opt_property == 'dip':
         dip_polar_file.write('%s, %d, %f, %f, \n' %
                              (compound, 1, max_test, polar_val))
@@ -569,9 +579,17 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_l
         population_file.write('%s, ' % (poly_name))
     population_file.write('\n')
 
-    for value in poly_property_list:
-        values_file.write('%f, ' % (value))
-    values_file.write('\n')
+    
+    if opt_property != 'dip_pol':
+        for value in poly_property_list:
+            values_file.write('%f, ' % (value))
+        values_file.write('\n')
+    else:
+        for item in poly_property_list:
+            for value in item:
+                values_file.write('%f, ' % (value))
+            values_file.write('-break-, ')
+        values_file.write('\n')
 
     # close all output files
     analysis_file.close()
@@ -670,7 +688,7 @@ def next_gen(params):
         elec_prop_list = find_elec_prop(population, poly_size, smiles_list)
         # store list of dipole moments and list of polarizabilities
         poly_property_list = []
-        poly_propery_list.append(elec_prop_list[0])
+        poly_property_list.append(elec_prop_list[0])
         poly_property_list.append(elec_prop_list[1])
     else:
         print("Error: opt_property not recognized. trace:main:loop pop properties")
@@ -705,16 +723,20 @@ def next_gen(params):
     # spear_05 = stats.spearmanr(gen1[:n_05], gen2[:n_05])[0]
     # spear_10 = stats.spearmanr(gen1[:n_10], gen2[:n_10])[0]
     # spear_15 = stats.spearmanr(gen1[:n_15], gen2[:n_15])[0]
-
+    
+    
     # capture monomer indexes and numerical sequence as strings for population file
-    analysis_file.write('%f, %f, %f, %f, \n' %
-                        (min_test, max_test, avg_test, spear))
+    if opt_property != 'dip_pol':
+        analysis_file.write('%f, %f, %f, n/a, \n' % (min_test, max_test, avg_test))
+    else:
+        analysis_file.write('%f, %f, %f, %f, %f, %f, n/a, \n' % (min_test[0], max_test[0], avg_test[0], min_test[1], max_test[1], avg_test[1]))   
+        
     if opt_property == 'dip':
         dip_polar_file.write('%s, %d, %f, %f, \n' %
-                             (compound, gen_counter, max_test, polar_val))
+                             (compound, 1, max_test, polar_val))
     if opt_property == 'pol':
         polar_dip_file.write('%s, %d, %f, %f, \n' %
-                             (compound, gen_counter, max_test, dip_val))
+                             (compound, 1, max_test, dip_val))
     # spear_file.write('%d, %f, %f, %f, \n' %
         # (gen_counter, spear_05, spear_10, spear_15))
 
@@ -724,9 +746,17 @@ def next_gen(params):
         population_file.write('%s, ' % (poly_name))
     population_file.write('\n')
 
-    for value in poly_property_list:
-        values_file.write('%f, ' % (value))
-    values_file.write('\n')
+    
+    if opt_property != 'dip_pol':
+        for value in poly_property_list:
+            values_file.write('%f, ' % (value))
+        values_file.write('\n')
+    else:
+        for item in poly_property_list:
+            for value in item:
+                values_file.write('%f, ' % (value))
+            values_file.write('-break-, ')
+        values_file.write('\n')
 
     # keep track of number of successive generations meeting Spearman criterion
     if spear > 0.92:
@@ -735,7 +765,7 @@ def next_gen(params):
         spear_counter = 0
 
     # keep track of number of successive generations meeting property value convergence criterion
-    if opt_propert != 'dip_pol':
+    if opt_property != 'dip_pol':
         if max_test >= (max_init - max_init * 0.05) and max_test <= (max_init + max_init * 0.05):
             prop_value_counter += 1
         else:
@@ -777,15 +807,15 @@ def main():
     # number of species of monomers in each polymer
     num_mono_species = 2
     # property of interest (options: molecular weight 'mw', dipole moment 'dip', polarizability 'pol', dipole+polar 'dip_pol')
-    opt_property = "mw"
+    opt_property = 'dip_pol'
 
     # check for convergence among top 30% (or top 8, whichever is larger) candidates between 5 generations
     perc = 0.1
 
     # Read in monomers from input file
-    read_file = open('../input_files/1235MonomerList.txt', 'r')
-    # read_file = open(
-    # '/ihome/ghutchison/dch45/Chem_GA_Project/input_files/1235MonomerList.txt', 'r')
+    # read_file = open('../input_files/1235MonomerList.txt', 'r')
+    read_file = open(
+        '/ihome/ghutchison/dch45/Chem_GA_Project/input_files/1235MonomerList.txt', 'r')
 
     # create list of monomer SMILES strings
     # assumes input file has one monomer per line
@@ -816,7 +846,7 @@ def main():
     prop_value_counter = params[12]
 
     # while spear_counter < 10 or prop_value_counter < 10:
-    for x in range(1):
+    for x in range(99):
         # run next generation of GA
         params = next_gen(params)
 
