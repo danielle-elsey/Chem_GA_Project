@@ -214,7 +214,7 @@ def fitness_fn_multi(opt_property_1, prop_list_1, opt_property_2, prop_list_2):
             ranks_1.append(len(get_ranks)-get_ranks[x])
     else:
         print("Error: opt_property not recognized. trace:fitness_fn")
-        
+
     # make sorted list of polymer indicies based on second property
     if opt_property_2 in ('mw', 'dip', 'pol') :
         # find ranks of properties
@@ -225,17 +225,15 @@ def fitness_fn_multi(opt_property_1, prop_list_1, opt_property_2, prop_list_2):
             ranks_2.append(len(get_ranks)-get_ranks[x])
     else:
         print("Error: opt_property not recognized. trace:fitness_fn")
-    
+
     # average ranks from both properties for each polymer
     avg_ranks= []
     for x in range(len(ranks_1)):
         temp_index = mean([float(ranks_1[x]), float(ranks_2[x])])
         avg_ranks.append(temp_index)
-        
-    # make list of indicies of polymers in population, sorted based on averaged ranks
+
+    # make list of indicies of polymers in population, sorted based on averaged ranks (0th = highest/best)
     ranked_indicies = list(np.argsort(avg_ranks))
-    # reverse list so highest property value = 0th
-    ranked_indicies.reverse()
 
     return ranked_indicies
 
@@ -537,7 +535,10 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_l
         dip_polar_file = open('gens_dip_polar.txt', 'w+')
     if opt_property == 'pol':
         polar_dip_file = open('gens_polar_dip.txt', 'w+')
-    spear_file = open('gens_spear.txt', 'w+')
+    if opt_property == 'dip_pol':
+        multi_file = open('gens_multi.txt', 'w+')
+    #spear_file = open('gens_spear.txt', 'w+')
+
 
     # write files headers
     if opt_property != 'dip_pol':
@@ -552,21 +553,38 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_l
         dip_polar_file.write('compound, gen, dipole, polar \n')
     if opt_property == 'pol':
         polar_dip_file.write('compound, gen, polar, dip \n')
+    if opt_property == 'dip_pol':
+        multi_file.write('max_poly_dip, min_poly_dip, med_poly_dip, max_poly_pol, min_poly_pol, med_poly_pol, \n')
     #spear_file.write('gen, spear_05, spear_10, spear_15 \n')
 
     # capture initial population data
     if opt_property != 'dip_pol':
         analysis_file.write('%f, %f, %f, n/a, \n' % (min_test, max_test, avg_test))
     else:
-        analysis_file.write('%f, %f, %f, %f, %f, %f, n/a, \n' % (min_test[0], max_test[0], avg_test[0], min_test[1], max_test[1], avg_test[1]))   
-        
+        analysis_file.write('%f, %f, %f, %f, %f, %f, n/a, \n' % (min_test[0], max_test[0], avg_test[0], min_test[1], max_test[1], avg_test[1]))
+
     if opt_property == 'dip':
         dip_polar_file.write('%s, %d, %f, %f, \n' %
                              (compound, 1, max_test, polar_val))
     if opt_property == 'pol':
         polar_dip_file.write('%s, %d, %f, %f, \n' %
                              (compound, 1, max_test, dip_val))
-    spear_file.write('1, n/a, n/a, n/a, \n')
+    if opt_property == 'dip_pol':
+        # determine and write to file properties of best polymer, worst polymer and "median" polymer (i.e. max dip and pol values are for SAME "best" polymer)
+        fitness_list = fitness_fn_multi('dip', poly_property_list[0], 'pol', poly_property_list[1])
+
+        max_polymer = population[fitness_list[0]]
+        min_polymer = population[fitness_list[len(fitness_list)-1]]
+        median = int((len(fitness_list)-1)/2)
+        med_polymer = population[fitness_list[median]]
+
+        max_poly = [poly_property_list[0][population.index(max_polymer)], poly_property_list[1][population.index(max_polymer)]]
+        min_poly = [poly_property_list[0][population.index(min_polymer)], poly_property_list[1][population.index(min_polymer)]]
+        med_poly = [poly_property_list[0][population.index(med_polymer)], poly_property_list[1][population.index(med_polymer)]]
+
+        multi_file.write('%f, %f, %f, %f, %f, %f, \n' % (min_poly[0], max_poly[0], med_poly[0], min_poly[1], max_poly[1], med_poly[1]))
+
+    #spear_file.write('1, n/a, n/a, n/a, \n')
 
     # write polymer population to file
     for polymer in population:
@@ -574,7 +592,7 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_l
         population_file.write('%s, ' % (poly_name))
     population_file.write('\n')
 
-    
+
     if opt_property != 'dip_pol':
         for value in poly_property_list:
             values_file.write('%f, ' % (value))
@@ -594,7 +612,9 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_l
         dip_polar_file.close()
     if opt_property == 'pol':
         polar_dip_file.close()
-    spear_file.close()
+    if opt_property == 'dip_pol':
+        multi_file.close()
+    #spear_file.close()
 
     # make backup copies of output files
     shutil.copy('gens_analysis.txt', 'gens_analysis_copy.txt')
@@ -604,7 +624,9 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_l
         shutil.copy('gens_dip_polar.txt', 'gens_dip_polar_copy.txt')
     if opt_property == 'pol':
         shutil.copy('gens_polar_dip.txt', 'gens_polar_dip_copy.txt')
-    shutil.copy('gens_spear.txt', 'gens_spear_copy.txt')
+    if opt_property == 'dip_pol':
+        shutil.copy('gens_multi.txt', 'gens_multi_copy.txt')
+    #shutil.copy('gens_spear.txt', 'gens_spear_copy.txt')
 
     params = [pop_size, poly_size, num_mono_species, opt_property, smiles_list, sequence_list,
               mono_list, population, poly_property_list, n, gen_counter, spear_counter, prop_value_counter]
@@ -648,7 +670,9 @@ def next_gen(params):
         dip_polar_file = open('gens_dip_polar.txt', 'a+')
     if opt_property == 'pol':
         polar_dip_file = open('gens_polar_dip.txt', 'a+')
-    spear_file = open('gens_spear.txt', 'a+')
+    if opt_property == 'dip_pol':
+        multi_file == open('gens_multi.txt', 'a+')
+    #spear_file = open('gens_spear.txt', 'a+')
 
     gen_counter += 1
 
@@ -699,6 +723,7 @@ def next_gen(params):
         avg_test = [mean(poly_property_list[0]), mean(poly_property_list[1])]
 
 
+
     if opt_property == 'dip':
         compound = utils.make_file_name(
             population[poly_property_list.index(max_test)], poly_size)
@@ -718,20 +743,35 @@ def next_gen(params):
     # spear_05 = stats.spearmanr(gen1[:n_05], gen2[:n_05])[0]
     # spear_10 = stats.spearmanr(gen1[:n_10], gen2[:n_10])[0]
     # spear_15 = stats.spearmanr(gen1[:n_15], gen2[:n_15])[0]
-    
-    
+
+
     # capture monomer indexes and numerical sequence as strings for population file
     if opt_property != 'dip_pol':
         analysis_file.write('%f, %f, %f, n/a, \n' % (min_test, max_test, avg_test))
     else:
-        analysis_file.write('%f, %f, %f, %f, %f, %f, n/a, \n' % (min_test[0], max_test[0], avg_test[0], min_test[1], max_test[1], avg_test[1]))   
-        
+        analysis_file.write('%f, %f, %f, %f, %f, %f, n/a, \n' % (min_test[0], max_test[0], avg_test[0], min_test[1], max_test[1], avg_test[1]))
+
     if opt_property == 'dip':
         dip_polar_file.write('%s, %d, %f, %f, \n' %
                              (compound, 1, max_test, polar_val))
     if opt_property == 'pol':
         polar_dip_file.write('%s, %d, %f, %f, \n' %
                              (compound, 1, max_test, dip_val))
+    if opt_property == 'dip_pol':
+        # determine and write to file properties of best polymer, worst polymer and "median" polymer (i.e. max dip and pol values are for SAME "best" polymer)
+        fitness_list = fitness_fn_multi('dip', poly_property_list[0], 'pol', poly_property_list[1])
+
+        max_polymer = population[fitness_list[0]]
+        min_polymer = population[fitness_list[len(fitness_list)-1]]
+        median = int((len(fitness_list)-1)/2)
+        med_polymer = population[fitness_list[median]]
+
+        max_poly = [poly_property_list[0][population.index(max_polymer)], poly_property_list[1][population.index(max_polymer)]]
+        min_poly = [poly_property_list[0][population.index(min_polymer)], poly_property_list[1][population.index(min_polymer)]]
+        med_poly = [poly_property_list[0][population.index(med_polymer)], poly_property_list[1][population.index(med_polymer)]]
+
+        multi_file.write('%f, %f, %f, %f, %f, %f, \n' % (min_poly[0], max_poly[0], med_poly[0], min_poly[1], max_poly[1], med_poly[1]))
+
     # spear_file.write('%d, %f, %f, %f, \n' %
         # (gen_counter, spear_05, spear_10, spear_15))
 
@@ -741,7 +781,7 @@ def next_gen(params):
         population_file.write('%s, ' % (poly_name))
     population_file.write('\n')
 
-    
+
     if opt_property != 'dip_pol':
         for value in poly_property_list:
             values_file.write('%f, ' % (value))
@@ -774,7 +814,9 @@ def next_gen(params):
         dip_polar_file.close()
     if opt_property == 'pol':
         polar_dip_file.close()
-    spear_file.close()
+    if opt_property == 'dip_pol':
+        multi_file.close()
+    #spear_file.close()
 
     # make backup copies of output files
     shutil.copy('gens_analysis.txt', 'gens_analysis_copy.txt')
@@ -784,7 +826,9 @@ def next_gen(params):
         shutil.copy('gens_dip_polar.txt', 'gens_dip_polar_copy.txt')
     if opt_property == 'pol':
         shutil.copy('gens_polar_dip.txt', 'gens_polar_dip_copy.txt')
-    shutil.copy('gens_spear.txt', 'gens_spear_copy.txt')
+    if opt_property == 'dip_pol':
+        shutil.copy('gens_multi.txt', 'gens_multi_copy.txt')
+    #shutil.copy('gens_spear.txt', 'gens_spear_copy.txt')
 
     params = [pop_size, poly_size, num_mono_species, opt_property, smiles_list, sequence_list,
               mono_list, population, poly_property_list, n, gen_counter, spear_counter, prop_value_counter]
