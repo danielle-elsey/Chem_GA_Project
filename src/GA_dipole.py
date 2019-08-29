@@ -132,41 +132,36 @@ def find_elec_prop(population, poly_size, smiles_list):
         # count number of successful parsed properties
         num_succ_reads = 0
 
-        # check for xTB failures
-        if 'FAILED!' in open('output/%s.out' % (file_name)).read():
-            # move output file to 'failed' directory
-            move_fail_file = subprocess.call(
-                '(mv output/%s.out failed/%s.out)' % (file_name, file_name), shell=True)
+        # parse output file for static polarizability and dipole moment, check for xTB success before recording values
+        read_output = open('output/%s.out' % (file_name), 'r')
+        for line in read_output:
+            # create list of tokens in line
+            tokens = line.split()
 
-            # note failure by filling property lists with dummy values
-            poly_polar_list.append(-10)
-            poly_dipole_list.append(-10)
+            if line.startswith(" Mol. α(0)"):
+                temp_polar = float(tokens[4])
+                num_succ_reads += 1
+            elif line.startswith("molecular dipole:"):
+                # iterate down to line with dipole value - necessary b/c dip value on non unique line
+                next(read_output)
+                next(read_output)
+                new_tokens = next(read_output).split()
 
-        # if xTB successful, parse output file for static polarizability and dipole moment
-        else:
-            read_output = open('output/%s.out' % (file_name), 'r')
-            for line in read_output:
-                # create list of tokens in line
-                tokens = line.split()
+                # dipole tensor - STILL A LIST OF STRINGS (not floats)
+                # TODO: add tensor functionality later
+                temp_dipole = float(new_tokens[4])
+                num_succ_reads += 1
+            if line.startswith("#  - GEOMETRY OPTIMIZATION FAILED!"):
+                num_succ_reads = 0
 
-                if line.startswith(" Mol. α(0)"):
-                    temp_polar = float(tokens[4])
-                    poly_polar_list.append(temp_polar)
-                    num_succ_reads += 1
-                elif line.startswith("   full:"):
-                    # dipole tensor - STILL A LIST OF STRINGS (not floats)
-                    # TODO: add tensor functionality later
-                    dipole_line = tokens
-                    temp_dipole = float(tokens[4])
-                    poly_dipole_list.append(temp_dipole)
-                    num_succ_reads += 1
-                    # break inner for loop to avoid overwriting with other lines starting with "full"
-                    break
-            read_output.close()
+        read_output.close()
 
+        if num_succ_reads == 2:
+            poly_dipole_list.append(temp_dipole)
+            poly_polar_list.append(temp_polar)
         # This is a catch to move files to the failed folder if polarizability
         # .. and dipole are not parsed.
-        if num_succ_reads != 2:
+        else:
             poly_polar_list.append(-10)
             poly_dipole_list.append(-10)
             move_fail_file = subprocess.call(
@@ -801,7 +796,7 @@ def main():
     restart = 'n'
 
     # number of polymers in population
-    pop_size = 32
+    pop_size = 4
     # number of monomers per polymer
     poly_size = 6
     # number of species of monomers in each polymer
@@ -846,7 +841,7 @@ def main():
     prop_value_counter = params[12]
 
     # while spear_counter < 10 or prop_value_counter < 10:
-    for x in range(99):
+    for x in range(1):
         # run next generation of GA
         params = next_gen(params)
 
