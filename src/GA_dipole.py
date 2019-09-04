@@ -554,7 +554,7 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_l
     if opt_property == 'pol':
         polar_dip_file.write('compound, gen, polar, dip \n')
     if opt_property == 'dip_pol':
-        multi_file.write('max_poly_dip, min_poly_dip, med_poly_dip, max_poly_pol, min_poly_pol, med_poly_pol, \n')
+        multi_file.write('min_poly_dip, max_poly_dip, med_poly_dip, min_poly_pol, max_poly_pol, med_poly_pol, \n')
     #spear_file.write('gen, spear_05, spear_10, spear_15 \n')
 
     # capture initial population data
@@ -671,7 +671,7 @@ def next_gen(params):
     if opt_property == 'pol':
         polar_dip_file = open('gens_polar_dip.txt', 'a+')
     if opt_property == 'dip_pol':
-        multi_file == open('gens_multi.txt', 'a+')
+        multi_file = open('gens_multi.txt', 'a+')
     #spear_file = open('gens_spear.txt', 'a+')
 
     gen_counter += 1
@@ -837,10 +837,10 @@ def next_gen(params):
 
 def main():
     # flag for restart from save
-    restart = 'n'
+    restart = 'y'
 
     # number of polymers in population
-    pop_size = 4
+    pop_size = 32
     # number of monomers per polymer
     poly_size = 6
     # number of species of monomers in each polymer
@@ -885,7 +885,7 @@ def main():
     prop_value_counter = params[12]
 
     # while spear_counter < 10 or prop_value_counter < 10:
-    for x in range(1):
+    for x in range(2):
         # run next generation of GA
         params = next_gen(params)
 
