@@ -15,6 +15,7 @@ from statistics import mean
 from copy import deepcopy
 import pickle
 import utils
+import scoring
 
 
 def find_poly_mw(population, poly_size, smiles_list):
@@ -274,10 +275,12 @@ def parent_select(opt_property, population, poly_property_list):
     parent_count = int(len(population) / 2)
 
     # make list of ranked polymer indicies
-    if opt_property != 'dip_pol':
-        fitness_list = fitness_fn(opt_property, poly_property_list)
-    else:
-        fitness_list = fitness_fn_multi('dip', poly_property_list[0], 'pol', poly_property_list[1])
+#     if opt_property != 'dip_pol':
+#         fitness_list = fitness_fn(opt_property, poly_property_list)
+#     else:
+#         fitness_list = fitness_fn_multi('dip', poly_property_list[0], 'pol', poly_property_list[1])
+
+    fitness_list = fitness_fn('dip_pol', poly_property_list[0], poly_property_list[1])
 
     # make list of top polymers
     parent_list = []
@@ -585,7 +588,7 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_l
                              (compound, 1, max_test, dip_val))
     if opt_property == 'dip_pol':
         # determine and write to file properties of best polymer, worst polymer and "median" polymer (i.e. max dip and pol values are for SAME "best" polymer)
-        fitness_list = fitness_fn_multi('dip', poly_property_list[0], 'pol', poly_property_list[1])
+        fitness_list = fitness_fn('dip_pol', poly_property_list[0], poly_property_list[1])
 
         max_polymer = population[fitness_list[0]]
         min_polymer = population[fitness_list[len(fitness_list)-1]]
@@ -773,7 +776,7 @@ def next_gen(params):
                              (compound, 1, max_test, dip_val))
     if opt_property == 'dip_pol':
         # determine and write to file properties of best polymer, worst polymer and "median" polymer (i.e. max dip and pol values are for SAME "best" polymer)
-        fitness_list = fitness_fn_multi('dip', poly_property_list[0], 'pol', poly_property_list[1])
+        fitness_list = fitness_fn('dip_pol', poly_property_list[0], poly_property_list[1])
 
         max_polymer = population[fitness_list[0]]
         min_polymer = population[fitness_list[len(fitness_list)-1]]
@@ -899,7 +902,7 @@ def main():
     prop_value_counter = params[12]
 
     # while spear_counter < 10 or prop_value_counter < 10:
-    for x in range(2):
+    for x in range(50):
         # run next generation of GA
         params = next_gen(params)
 
