@@ -11,12 +11,12 @@ def simple_descending(score_list):
 
     return ranked_indicies
 
-def comb_dip_pol(dip_prop_list, pol_prop_list, dip_coeff, pol_coeff):
+def comb_dip_pol(dip_prop_list, pol_prop_list, vol_list, dip_coeff, pol_coeff):
     score_list = []
     for x in range(len(dip_prop_list)):
         alpha = pol_prop_list[x]
         mu_2 = dip_prop_list[x]**2
-        vol = 1
+        vol = vol_list[x]
 
         temp_score = ((alpha/vol)**pol_coeff + (mu_2/(3*Boltzmann*298*vol))**dip_coeff)
 

@@ -175,8 +175,22 @@ def find_elec_prop(population, poly_size, smiles_list):
 
     return elec_prop_lists
 
+def find_pop_volumes(population, poly_size):
+    vol_list = []
+    for poly in population:
+        temp_file_name = utils.make_file_name(poly, poly_size)
+        try:
+            volume = subprocess.call('(python volume.py opt/%s_opt.xyz)' % (temp_file_name), shell=True)
+            volume = volume.split()
+            vol_list.append(volume[2])
+        catch:
+            print('Error in finding volumes')
 
-def fitness_fn(opt_property, *poly_property_list):
+    return vol_list
+
+
+
+def fitness_fn(opt_property, *poly_property_list, population, poly_size):
     properties = []
     for list in poly_property_list:
         properties.append(list)
@@ -184,7 +198,8 @@ def fitness_fn(opt_property, *poly_property_list):
     if opt_property in ('mw', 'dip', 'pol'):
         ranked_indicies = scoring.simple_descending(properties[0])
     elif opt_property == 'dip_pol':
-        ranked_indicies = scoring.comb_dip_pol(properties[0], properties[1], 1, 1)
+        vol_list = find_pop_volumes(population, poly_size)
+        ranked_indicies = scoring.comb_dip_pol(properties[0], properties[1], vol_list, 1, 1)
     else:
         print('Error: opt_property not recognized; Traceback: fitnesss_fn')
     return(ranked_indicies)
@@ -253,7 +268,7 @@ def fitness_fn(opt_property, *poly_property_list):
 #     return ranked_indicies
 #
 
-def parent_select(opt_property, population, poly_property_list):
+def parent_select(opt_property, population, poly_property_list, poly_size):
     '''
     Finds top half of population
 
@@ -280,7 +295,7 @@ def parent_select(opt_property, population, poly_property_list):
 #     else:
 #         fitness_list = fitness_fn_multi('dip', poly_property_list[0], 'pol', poly_property_list[1])
 
-    fitness_list = fitness_fn('dip_pol', poly_property_list[0], poly_property_list[1])
+    fitness_list = fitness_fn('dip_pol', poly_property_list[0], poly_property_list[1], population, poly_size)
 
     # make list of top polymers
     parent_list = []
@@ -701,7 +716,7 @@ def next_gen(params):
 
     # Selection - select heaviest (best) 50% of polymers as parents
     population = parent_select(
-        opt_property, population, poly_property_list)
+        opt_property, population, poly_property_list, poly_size)
 
     # Crossover & Mutation - create children to repopulate bottom 50% of polymers in population
     population = crossover_mutate(
