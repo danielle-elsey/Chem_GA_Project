@@ -1,9 +1,10 @@
 import numpy as np
 from scipy.constants import Boltzmann
 
+import utils
+
 # rank polymers based on highest property value = best
 def simple_descending(score_list):
-
     # make list of indicies of polymers in population, sorted based on property values
     ranked_indicies = list(np.argsort(score_list))
     # reverse list so highest property value = 0th
@@ -11,7 +12,11 @@ def simple_descending(score_list):
 
     return ranked_indicies
 
-def comb_dip_pol(dip_prop_list, pol_prop_list, vol_list, dip_coeff, pol_coeff):
+def comb_dip_pol(dip_prop_list, pol_prop_list, dip_coeff, pol_coeff, population, poly_size):
+
+    # find polymer volumes
+    vol_list = utils.make_vol_list(population, poly_size)
+
     score_list = []
     for x in range(len(dip_prop_list)):
         alpha = pol_prop_list[x]

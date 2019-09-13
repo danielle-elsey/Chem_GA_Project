@@ -14,9 +14,12 @@ from scipy import stats
 from statistics import mean
 from copy import deepcopy
 import pickle
+import math
+
 import utils
 import scoring
 
+ob = pybel.ob
 
 def find_poly_mw(population, poly_size, smiles_list):
     '''
@@ -175,20 +178,6 @@ def find_elec_prop(population, poly_size, smiles_list):
 
     return elec_prop_lists
 
-def find_pop_volumes(population, poly_size):
-    vol_list = []
-    for poly in population:
-        temp_file_name = utils.make_file_name(poly, poly_size)
-        try:
-            volume = subprocess.call('(python volume.py opt/%s_opt.xyz)' % (temp_file_name), shell=True)
-            volume = volume.split()
-            vol_list.append(volume[2])
-        catch:
-            print('Error in finding volumes')
-
-    return vol_list
-
-
 
 def fitness_fn(opt_property, *poly_property_list, population, poly_size):
     properties = []
@@ -199,7 +188,7 @@ def fitness_fn(opt_property, *poly_property_list, population, poly_size):
         ranked_indicies = scoring.simple_descending(properties[0])
     elif opt_property == 'dip_pol':
         vol_list = find_pop_volumes(population, poly_size)
-        ranked_indicies = scoring.comb_dip_pol(properties[0], properties[1], vol_list, 1, 1)
+        ranked_indicies = scoring.comb_dip_pol(properties[0], properties[1], 1, 1, population, poly_size)
     else:
         print('Error: opt_property not recognized; Traceback: fitnesss_fn')
     return(ranked_indicies)
