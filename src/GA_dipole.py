@@ -14,12 +14,10 @@ from scipy import stats
 from statistics import mean
 from copy import deepcopy
 import pickle
-import math
 
 import utils
 import scoring
 
-ob = pybel.ob
 
 def find_poly_mw(population, poly_size, smiles_list):
     '''
@@ -179,16 +177,15 @@ def find_elec_prop(population, poly_size, smiles_list):
     return elec_prop_lists
 
 
-def fitness_fn(opt_property, *poly_property_list, population, poly_size):
-    properties = []
-    for list in poly_property_list:
-        properties.append(list)
+def fitness_fn(opt_property, poly_property_list1, poly_property_list2, population, poly_size):
+#     properties = []
+#     for list in poly_property_list:
+#         properties.append(list)
 
     if opt_property in ('mw', 'dip', 'pol'):
-        ranked_indicies = scoring.simple_descending(properties[0])
+        ranked_indicies = scoring.simple_descending(poly_property_list1)
     elif opt_property == 'dip_pol':
-        vol_list = find_pop_volumes(population, poly_size)
-        ranked_indicies = scoring.comb_dip_pol(properties[0], properties[1], 1, 1, population, poly_size)
+        ranked_indicies = scoring.comb_dip_pol(poly_property_list1, poly_property_list2, 1, 1, population, poly_size)
     else:
         print('Error: opt_property not recognized; Traceback: fitnesss_fn')
     return(ranked_indicies)
@@ -592,7 +589,7 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_l
                              (compound, 1, max_test, dip_val))
     if opt_property == 'dip_pol':
         # determine and write to file properties of best polymer, worst polymer and "median" polymer (i.e. max dip and pol values are for SAME "best" polymer)
-        fitness_list = fitness_fn('dip_pol', poly_property_list[0], poly_property_list[1])
+        fitness_list = fitness_fn('dip_pol', poly_property_list[0], poly_property_list[1], population, poly_size)
 
         max_polymer = population[fitness_list[0]]
         min_polymer = population[fitness_list[len(fitness_list)-1]]
@@ -780,7 +777,7 @@ def next_gen(params):
                              (compound, 1, max_test, dip_val))
     if opt_property == 'dip_pol':
         # determine and write to file properties of best polymer, worst polymer and "median" polymer (i.e. max dip and pol values are for SAME "best" polymer)
-        fitness_list = fitness_fn('dip_pol', poly_property_list[0], poly_property_list[1])
+        fitness_list = fitness_fn('dip_pol', poly_property_list[0], poly_property_list[1], population, poly_size)
 
         max_polymer = population[fitness_list[0]]
         min_polymer = population[fitness_list[len(fitness_list)-1]]
@@ -906,7 +903,7 @@ def main():
     prop_value_counter = params[12]
 
     # while spear_counter < 10 or prop_value_counter < 10:
-    for x in range(50):
+    for x in range(100):
         # run next generation of GA
         params = next_gen(params)
 

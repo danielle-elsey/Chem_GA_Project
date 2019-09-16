@@ -4,6 +4,7 @@ smiles strings and files
 '''
 import pybel
 import random
+import math
 from copy import deepcopy
 from itertools import product
 
@@ -248,9 +249,7 @@ def find_volume(filename):
     ]
 
     extension = filename.split('.')[1]
-    print('extension', extension)
     mol = next(pybel.readfile(extension, filename))
-    print('filename', filename)
 
     volume = 0.0
     # Add the volumes of all atoms
@@ -272,10 +271,9 @@ def find_volume(filename):
 def make_vol_list(population, poly_size):
     vol_list = []
     for poly in population:
-        temp_file_name = utils.make_file_name(poly, poly_size)
-        print(temp_file_name)
+        temp_file_name = make_file_name(poly, poly_size)
         # try:
-        volume = find_volume('%s.xyz' % temp_file_name)
+        volume = find_volume('opt/%s_opt.xyz' % temp_file_name)
         vol_list.append(volume)
         # catch:
         #     print('Error in finding volumes')
