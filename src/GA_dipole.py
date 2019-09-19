@@ -15,6 +15,8 @@ from statistics import mean
 from copy import deepcopy
 import pickle
 
+from scipy.constants import Boltzmann
+
 import utils
 import scoring
 
@@ -572,7 +574,7 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_l
     if opt_property == 'pol':
         polar_dip_file.write('compound, gen, polar, dip \n')
     if opt_property == 'dip_pol':
-        multi_file.write('min_poly_dip, max_poly_dip, med_poly_dip, min_poly_pol, max_poly_pol, med_poly_pol, \n')
+        multi_file.write('min_dip_term, max_dip_term, med_dip_term, min_pol_term, max_pol_term, med_pol_term, \n')
     #spear_file.write('gen, spear_05, spear_10, spear_15 \n')
 
     # capture initial population data
@@ -591,16 +593,42 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_l
         # determine and write to file properties of best polymer, worst polymer and "median" polymer (i.e. max dip and pol values are for SAME "best" polymer)
         fitness_list = fitness_fn('dip_pol', poly_property_list[0], poly_property_list[1], population, poly_size)
 
-        max_polymer = population[fitness_list[0]]
         min_polymer = population[fitness_list[len(fitness_list)-1]]
+        max_polymer = population[fitness_list[0]]
         median = int((len(fitness_list)-1)/2)
         med_polymer = population[fitness_list[median]]
 
-        max_poly = [poly_property_list[0][population.index(max_polymer)], poly_property_list[1][population.index(max_polymer)]]
-        min_poly = [poly_property_list[0][population.index(min_polymer)], poly_property_list[1][population.index(min_polymer)]]
-        med_poly = [poly_property_list[0][population.index(med_polymer)], poly_property_list[1][population.index(med_polymer)]]
+        # find volumes of specified polymers
+        file_name_min = utils.make_file_name(min_polymer, poly_size)
+        vol_min = utils.find_volume('opt/%s_opt.xyz' % (file_name_min))
 
-        multi_file.write('%f, %f, %f, %f, %f, %f, \n' % (min_poly[0], max_poly[0], med_poly[0], min_poly[1], max_poly[1], med_poly[1]))
+        file_name_max = utils.make_file_name(max_polymer, poly_size)
+        vol_max = utils.find_volume('opt/%s_opt.xyz' % (file_name_max))
+
+        file_name_med = utils.make_file_name(med_polymer, poly_size)
+        vol_med = utils.find_volume('opt/%s_opt.xyz' % (file_name_med))
+
+        # find dipole moments of specified polymers
+        mu_min = poly_property_list[0][population.index(min_polymer)]
+        mu_max = poly_property_list[0][population.index(max_polymer)]
+        mu_med = poly_property_list[0][population.index(med_polymer)]
+
+        # calculate dipole terms for specified polymers
+        min_dip_term = mu_min**2/(3*Boltzmann*298*vol_min)
+        max_dip_term = mu_max**2/(3*Boltzmann*298*vol_max)
+        med_dip_term = mu_med**2/(3*Boltzmann*298*vol_med)
+
+        # find polarizabilities for specified polymers
+        alpha_min = poly_property_list[1][population.index(min_polymer)]
+        alpha_max = poly_property_list[1][population.index(max_polymer)]
+        alpha_med = poly_property_list[1][population.index(med_polymer)]
+
+        # calculate polarizability terms for specified polymers
+        min_pol_term = alpha_min/vol_min
+        max_pol_term = alpha_max/vol_max
+        med_pol_term = alpha_med/vol_med
+        
+        multi_file.write('%f, %f, %f, %f, %f, %f, \n' % (min_dip_term, max_dip_term, med_dip_term, min_pol_term, max_pol_term, med_pol_term))
 
     #spear_file.write('1, n/a, n/a, n/a, \n')
 
@@ -779,16 +807,42 @@ def next_gen(params):
         # determine and write to file properties of best polymer, worst polymer and "median" polymer (i.e. max dip and pol values are for SAME "best" polymer)
         fitness_list = fitness_fn('dip_pol', poly_property_list[0], poly_property_list[1], population, poly_size)
 
-        max_polymer = population[fitness_list[0]]
         min_polymer = population[fitness_list[len(fitness_list)-1]]
+        max_polymer = population[fitness_list[0]]
         median = int((len(fitness_list)-1)/2)
         med_polymer = population[fitness_list[median]]
 
-        max_poly = [poly_property_list[0][population.index(max_polymer)], poly_property_list[1][population.index(max_polymer)]]
-        min_poly = [poly_property_list[0][population.index(min_polymer)], poly_property_list[1][population.index(min_polymer)]]
-        med_poly = [poly_property_list[0][population.index(med_polymer)], poly_property_list[1][population.index(med_polymer)]]
+        # find volumes of specified polymers
+        file_name_min = utils.make_file_name(min_polymer, poly_size)
+        vol_min = utils.find_volume('opt/%s_opt.xyz' % (file_name_min))
 
-        multi_file.write('%f, %f, %f, %f, %f, %f, \n' % (min_poly[0], max_poly[0], med_poly[0], min_poly[1], max_poly[1], med_poly[1]))
+        file_name_max = utils.make_file_name(max_polymer, poly_size)
+        vol_max = utils.find_volume('opt/%s_opt.xyz' % (file_name_max))
+
+        file_name_med = utils.make_file_name(med_polymer, poly_size)
+        vol_med = utils.find_volume('opt/%s_opt.xyz' % (file_name_med))
+
+        # find dipole moments of specified polymers
+        mu_min = poly_property_list[0][population.index(min_polymer)]
+        mu_max = poly_property_list[0][population.index(max_polymer)]
+        mu_med = poly_property_list[0][population.index(med_polymer)]
+
+        # calculate dipole terms for specified polymers
+        min_dip_term = mu_min**2/(3*Boltzmann*298*vol_min)
+        max_dip_term = mu_max**2/(3*Boltzmann*298*vol_max)
+        med_dip_term = mu_med**2/(3*Boltzmann*298*vol_med)
+
+        # find polarizabilities for specified polymers
+        alpha_min = poly_property_list[1][population.index(min_polymer)]
+        alpha_max = poly_property_list[1][population.index(max_polymer)]
+        alpha_med = poly_property_list[1][population.index(med_polymer)]
+
+        # calculate polarizability terms for specified polymers
+        min_pol_term = alpha_min/vol_min
+        max_pol_term = alpha_max/vol_max
+        med_pol_term = alpha_med/vol_med
+
+        multi_file.write('%f, %f, %f, %f, %f, %f, \n' % (min_dip_term, max_dip_term, med_dip_term, min_pol_term, max_pol_term, med_pol_term))
 
     # spear_file.write('%d, %f, %f, %f, \n' %
         # (gen_counter, spear_05, spear_10, spear_15))
@@ -855,7 +909,7 @@ def next_gen(params):
 
 def main():
     # flag for restart from save
-    restart = 'y'
+    restart = 'n'
 
     # number of polymers in population
     pop_size = 32
@@ -903,7 +957,7 @@ def main():
     prop_value_counter = params[12]
 
     # while spear_counter < 10 or prop_value_counter < 10:
-    for x in range(100):
+    for x in range(99):
         # run next generation of GA
         params = next_gen(params)
 
