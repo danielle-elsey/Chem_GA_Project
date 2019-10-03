@@ -178,9 +178,6 @@ def find_elec_prop(population, poly_size, smiles_list):
 
 
 def fitness_fn(opt_property, poly_property_list, population, poly_size):
-#     properties = []
-#     for list in poly_property_list:
-#         properties.append(list)
 
     if opt_property in ('mw', 'dip', 'pol'):
         ranked_indicies = scoring.simple_descending(poly_property_list)
@@ -190,69 +187,6 @@ def fitness_fn(opt_property, poly_property_list, population, poly_size):
         print('Error: opt_property not recognized; Traceback: fitnesss_fn')
     return(ranked_indicies)
 
-
-# def fitness_fn(opt_property, poly_property_list):
-#     '''
-#     Ranks polymers in population based on associated property values
-#     Rank 0 = best
-#
-#     Parameters
-#     ---------
-#     opt_property: str
-#         property being optimized
-#     poly_prop_list: list
-#         list of property values corresponding to polymers in population
-#
-#     Returns
-#     -------
-#     ranked_indicies: list
-#         list of ranked polymer indicies with first entry being best
-#     '''
-#     # rank polymers based on highest property value = best
-#     if opt_property in ('mw', 'dip', 'pol') :
-#         # make list of indicies of polymers in population, sorted based on property values
-#         ranked_indicies = list(np.argsort(poly_property_list))
-#         # reverse list so highest property value = 0th
-#         ranked_indicies.reverse()
-#     else:
-#         print("Error: opt_property not recognized. trace:fitness_fn")
-#
-#     return ranked_indicies
-#
-#
-# def fitness_fn_multi(opt_property_1, prop_list_1, opt_property_2, prop_list_2):
-#     if opt_property_1 in ('mw', 'dip', 'pol') :
-#         # find ranks of properties
-#         get_ranks = list(stats.rankdata(prop_list_1, method = 'ordinal'))
-#         # convert ranks so that 1st = highest value
-#         ranks_1 = []
-#         for x in range (len(get_ranks)):
-#             ranks_1.append(len(get_ranks)-get_ranks[x])
-#     else:
-#         print("Error: opt_property not recognized. trace:fitness_fn")
-#
-#     # make sorted list of polymer indicies based on second property
-#     if opt_property_2 in ('mw', 'dip', 'pol') :
-#         # find ranks of properties
-#         get_ranks = list(stats.rankdata(prop_list_2, method = 'ordinal'))
-#         # convert ranks so that 1st = highest value
-#         ranks_2 = []
-#         for x in range (len(get_ranks)):
-#             ranks_2.append(len(get_ranks)-get_ranks[x])
-#     else:
-#         print("Error: opt_property not recognized. trace:fitness_fn")
-#
-#     # average ranks from both properties for each polymer
-#     avg_ranks= []
-#     for x in range(len(ranks_1)):
-#         temp_index = mean([float(ranks_1[x]), float(ranks_2[x])])
-#         avg_ranks.append(temp_index)
-#
-#     # make list of indicies of polymers in population, sorted based on averaged ranks (0th = highest/best)
-#     ranked_indicies = list(np.argsort(avg_ranks))
-#
-#     return ranked_indicies
-#
 
 def parent_select(opt_property, population, poly_property_list, poly_size):
     '''
@@ -557,13 +491,13 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_l
         median = int((len(fitness_list)-1)/2)
         med_polymer = population[fitness_list[median]]
 
-        min_test_a = poly_property_list[1][min_polymer]
-        max_test_a = poly_property_list[1][max_polymer]
-        med_test_a = poly_property_list[1][med_polymer]
+        min_test_a = poly_property_list[1][population.index(min_polymer)]
+        max_test_a = poly_property_list[1][population.index(max_polymer)]
+        med_test_a = poly_property_list[1][population.index(med_polymer)]
 
-        min_test_m = poly_property_list[0][min_polymer]
-        max_test_m = poly_property_list[0][max_polymer]
-        med_test_m = poly_property_list[0][med_polymer]
+        min_test_m = poly_property_list[0][population.index(min_polymer)]
+        max_test_m = poly_property_list[0][population.index(max_polymer)]
+        med_test_m = poly_property_list[0][population.index(med_polymer)]
 
 
     # write to quick analysis file
@@ -587,12 +521,12 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_l
             analysis_file.write('1,1,%s,%f\n' % (file_name, prop))
 
         elif opt_property == 'pol':
-            dip_val = dip_list[poly_property_list.index(poly)]
+            dip_val = dip_list[population.index(poly)]
             analysis_file.write('1,1,%s,%f,%f\n' % (file_name, prop, dip_val))
         
         elif opt_property == 'dip':
-            pol_val = polar_list[poly_property_list.index(poly)]
-            analysis_file.write('1,1,%s,%f,%f\n' % (file_name, prop, pol_val))
+            pol_val = polar_list[population.index(poly)]
+            analysis_file.write('1,1,%s,%f,%f\n' % (file_name, pol_val, prop))
         
         elif opt_property == 'dip_pol':
             alpha = poly_property_list[1][population.index(poly)]
@@ -607,7 +541,7 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_l
     # make backup copies of output files
     shutil.copy('quick_analysis_data.txt', 'quick_analysis_data_copy.txt')
     shutil.copy('full_analysis_data.txt', 'full_analysis_data_copy.txt')
-   
+    
     params = [pop_size, poly_size, num_mono_species, opt_property, smiles_list, sequence_list,
               mono_list, population, poly_property_list, n, gen_counter, spear_counter, prop_value_counter]
     return(params)
@@ -641,8 +575,7 @@ def next_gen(params):
     gen_counter = params[10]
     spear_counter = params[11]
     prop_value_counter = params[12]
-
-   
+      
     gen_counter += 1
 
     if opt_property != 'dip_pol':
@@ -720,13 +653,13 @@ def next_gen(params):
         median = int((len(fitness_list)-1)/2)
         med_polymer = population[fitness_list[median]]
 
-        min_test_a = poly_property_list[1][min_polymer]
-        max_test_a = poly_property_list[1][max_polymer]
-        med_test_a = poly_property_list[1][med_polymer]
+        min_test_a = poly_property_list[1][population.index(min_polymer)]
+        max_test_a = poly_property_list[1][population.index(max_polymer)]
+        med_test_a = poly_property_list[1][population.index(med_polymer)]
 
-        min_test_m = poly_property_list[0][min_polymer]
-        max_test_m = poly_property_list[0][max_polymer]
-        med_test_m = poly_property_list[0][med_polymer]
+        min_test_m = poly_property_list[0][population.index(min_polymer)]
+        max_test_m = poly_property_list[0][population.index(max_polymer)]
+        med_test_m = poly_property_list[0][population.index(med_polymer)]
 
 
     # write to quick analysis file
@@ -750,12 +683,12 @@ def next_gen(params):
             analysis_file.write('1,%d,%s,%f\n' % (gen_counter, file_name, prop))
 
         elif opt_property == 'pol':
-            dip_val = dip_list[poly_property_list.index(poly)]
+            dip_val = dip_list[population.index(poly)]
             analysis_file.write('1,%d,%s,%f,%f\n' % (gen_counter, file_name, prop, dip_val))
         
         elif opt_property == 'dip':
-            pol_value = polar_list[poly_property_list.index(poly)]
-            analysis_file.write('1,%d,%s,%f,%f\n' % (gen_counter, file_name, prop, pol_value))
+            pol_value = polar_list[population.index(poly)]
+            analysis_file.write('1,%d,%s,%f,%f\n' % (gen_counter, file_name, pol_value, prop))
         
         elif opt_property == 'dip_pol':
             alpha = poly_property_list[1][population.index(poly)]
@@ -782,21 +715,21 @@ def main():
     restart = 'n'
 
     # number of polymers in population
-    pop_size = 32
+    pop_size = 2
     # number of monomers per polymer
     poly_size = 6
     # number of species of monomers in each polymer
     num_mono_species = 2
     # property of interest (options: molecular weight 'mw', dipole moment 'dip', polarizability 'pol', dipole+polar 'dip_pol')
-    opt_property = 'mw'
+    opt_property = 'dip_pol'
 
     # check for convergence among top 30% (or top 8, whichever is larger) candidates between 5 generations
     perc = 0.1
 
     # Read in monomers from input file
-    read_file = open('../input_files/1235MonomerList.txt', 'r')
-    # read_file = open(
-    #     '/ihome/ghutchison/dch45/Chem_GA_Project/input_files/1235MonomerList.txt', 'r')
+    # read_file = open('../input_files/1235MonomerList.txt', 'r')
+    read_file = open(
+        '/ihome/ghutchison/dch45/Chem_GA_Project/input_files/1235MonomerList.txt', 'r')
 
     # create list of monomer SMILES strings
     # assumes input file has one monomer per line
@@ -827,7 +760,7 @@ def main():
     # prop_value_counter = params[12]
 
     # while spear_counter < 10 or prop_value_counter < 10:
-    for x in range(4):
+    for x in range(2):
         # run next generation of GA
         params = next_gen(params)
 
