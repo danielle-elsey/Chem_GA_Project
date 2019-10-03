@@ -461,8 +461,8 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_l
 
 
     # create new analysis output files
-    quick_file = open('quick_analysis_data.txt', 'w+')
-    analysis_file = open('full_analysis_data.txt', 'w+')  
+    quick_file = open('quick_analysis_data.csv', 'w+')
+    analysis_file = open('full_analysis_data.csv', 'w+')  
     
     # write analysis file headers
     if opt_property == 'mw':
@@ -539,8 +539,8 @@ def init_gen(pop_size, poly_size, num_mono_species, opt_property, perc, smiles_l
     analysis_file.close()
 
     # make backup copies of output files
-    shutil.copy('quick_analysis_data.txt', 'quick_analysis_data_copy.txt')
-    shutil.copy('full_analysis_data.txt', 'full_analysis_data_copy.txt')
+    shutil.copy('quick_analysis_data.csv', 'quick_analysis_data_copy.csv')
+    shutil.copy('full_analysis_data.csv', 'full_analysis_data_copy.csv')
     
     params = [pop_size, poly_size, num_mono_species, opt_property, smiles_list, sequence_list,
               mono_list, population, poly_property_list, n, gen_counter, spear_counter, prop_value_counter]
@@ -637,8 +637,8 @@ def next_gen(params):
 
 
     # open analysis output files
-    quick_file = open('quick_analysis_data.txt', 'a+')
-    analysis_file = open('full_analysis_data.txt', 'a+')  
+    quick_file = open('quick_analysis_data.csv', 'a+')
+    analysis_file = open('full_analysis_data.csv', 'a+')  
     
     # find values for quick analysis file
     if opt_property != 'dip_pol':
@@ -702,8 +702,8 @@ def next_gen(params):
     analysis_file.close()
 
     # make backup copies of output files
-    shutil.copy('quick_analysis_data.txt', 'quick_analysis_data_copy.txt')
-    shutil.copy('full_analysis_data.txt', 'full_analysis_data_copy.txt')
+    shutil.copy('quick_analysis_data.csv', 'quick_analysis_data_copy.csv')
+    shutil.copy('full_analysis_data.csv', 'full_analysis_data_copy.csv')
 
     params = [pop_size, poly_size, num_mono_species, opt_property, smiles_list, sequence_list,
               mono_list, population, poly_property_list, n, gen_counter, spear_counter, prop_value_counter]
@@ -781,19 +781,19 @@ def main():
 
     
     # delete final newline characters from files
-    quick_file = open('quick_analysis_data.txt', 'a+')
-    analysis_file = open('full_analysis_data.txt', 'a+')
+    quick_file = open('quick_analysis_data.csv', 'a+')
+    analysis_file = open('full_analysis_data.csv', 'a+')
 
-    with open('quick_analysis_data.txt', 'rb+') as filehandle:
+    with open('quick_analysis_data.csv', 'rb+') as filehandle:
         filehandle.seek(-1, os.SEEK_END)
         filehandle.truncate()
 
-    with open('full_analysis_data.txt', 'rb+') as filehandle:
+    with open('full_analysis_data.csv', 'rb+') as filehandle:
         filehandle.seek(-1, os.SEEK_END)
         filehandle.truncate()
 
     # remove unnecessary copies
-    del_copies = subprocess.call('(rm -f *_copy.txt)', shell=True)
+    del_copies = subprocess.call('(rm -f *_copy.csv)', shell=True)
 
 
 if __name__ == '__main__':

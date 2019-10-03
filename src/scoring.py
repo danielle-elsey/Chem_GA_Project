@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.constants import Boltzmann
+import scipy.constants as sc
 
 import utils
 
